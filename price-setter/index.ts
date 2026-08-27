@@ -31,35 +31,38 @@ const stockAmmAbi = [
 interface StockTarget {
   id: number
   ticker: string
-  defaultPrice: number
+  defaultOpenPrice: number
 }
 
 const STOCKS: StockTarget[] = [
-  { id: 0, ticker: 'AAPL', defaultPrice: 225.50 },
-  { id: 1, ticker: 'TSLA', defaultPrice: 212.30 },
-  { id: 2, ticker: 'NVDA', defaultPrice: 126.80 },
-  { id: 3, ticker: 'GOOGL', defaultPrice: 167.20 },
-  { id: 4, ticker: 'MSFT', defaultPrice: 414.90 },
-  { id: 5, ticker: 'AMZN', defaultPrice: 176.40 },
-  { id: 6, ticker: 'META', defaultPrice: 512.10 },
-  { id: 7, ticker: 'COIN', defaultPrice: 204.60 },
+  { id: 0, ticker: 'AAPL', defaultOpenPrice: 224.80 },
+  { id: 1, ticker: 'TSLA', defaultOpenPrice: 208.50 },
+  { id: 2, ticker: 'NVDA', defaultOpenPrice: 124.90 },
+  { id: 3, ticker: 'GOOGL', defaultOpenPrice: 165.40 },
+  { id: 4, ticker: 'MSFT', defaultOpenPrice: 412.10 },
+  { id: 5, ticker: 'AMZN', defaultOpenPrice: 174.20 },
+  { id: 6, ticker: 'META', defaultOpenPrice: 508.40 },
+  { id: 7, ticker: 'COIN', defaultOpenPrice: 198.30 },
 ]
 
-async function fetchRealClosingPrice(ticker: string, fallbackPrice: number): Promise<number> {
+async function fetchRealMarketOpenPrice(ticker: string, fallbackPrice: number): Promise<number> {
   try {
-    // Attempting query to public query API (e.g. Yahoo Finance v8 endpoint)
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`
     const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
     if (res.ok) {
       const data = await res.json()
-      const close = data?.chart?.result?.[0]?.meta?.regularMarketPrice
-      if (typeof close === 'number' && close > 0) {
-        console.log(`Fetched live closing price for ${ticker}: $${close}`)
-        return close
+      const resultMeta = data?.chart?.result?.[0]?.meta
+      const openPrices = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.open
+      
+      // Get market open price (or regular market open / fallback)
+      const openPrice = openPrices?.[0] || resultMeta?.regularMarketOpen || resultMeta?.regularMarketPrice
+      if (typeof openPrice === 'number' && openPrice > 0) {
+        console.log(`Fetched Market Open price for ${ticker}: $${openPrice.toFixed(2)}`)
+        return openPrice
       }
     }
   } catch (err) {
-    console.warn(`Could not fetch live price for ${ticker}, using benchmark price: $${fallbackPrice}`)
+    console.warn(`Could not fetch market open price for ${ticker}, using default open: $${fallbackPrice}`)
   }
   return fallbackPrice
 }
@@ -74,7 +77,7 @@ async function main() {
   }
 
   const account = privateKeyToAccount(privateKey)
-  console.log(`Executing daily price update from account: ${account.address}`)
+  console.log(`Executing daily market-open price anchor update from: ${account.address}`)
 
   const publicClient = createPublicClient({
     chain: monadTestnet,
@@ -91,13 +94,13 @@ async function main() {
   const realPrices: bigint[] = []
 
   for (const stock of STOCKS) {
-    const priceUSD = await fetchRealClosingPrice(stock.ticker, stock.defaultPrice)
-    const priceWei = parseUnits(priceUSD.toFixed(4), 18)
+    const openPriceUSD = await fetchRealMarketOpenPrice(stock.ticker, stock.defaultOpenPrice)
+    const priceWei = parseUnits(openPriceUSD.toFixed(4), 18)
     stockIds.push(BigInt(stock.id))
     realPrices.push(priceWei)
   }
 
-  console.log(`Submitting batch daily reset transaction for ${stockIds.length} stocks...`)
+  console.log(`Submitting batch market-open price reset transaction for ${stockIds.length} stocks...`)
 
   const hash = await walletClient.writeContract({
     address: contractAddress,
@@ -110,7 +113,7 @@ async function main() {
   console.log('Waiting for confirmation on Monad...')
 
   const receipt = await publicClient.waitForTransactionReceipt({ hash })
-  console.log(`Daily prices updated successfully in block ${receipt.blockNumber}!`)
+  console.log(`Daily Market Open prices anchored successfully in block ${receipt.blockNumber}!`)
 }
 
 main().catch((error) => {

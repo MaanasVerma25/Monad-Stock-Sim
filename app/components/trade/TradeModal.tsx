@@ -1,12 +1,13 @@
 "use client"
 
-import { useState } from "react"
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi"
+import { useState, useEffect } from "react"
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useWatchContractEvent } from "wagmi"
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { X, Loader2, ArrowUpRight, ArrowDownRight, Anchor, TrendingUp, TrendingDown } from "lucide-react"
+import { X, Loader2, ArrowUpRight, ArrowDownRight, Anchor, TrendingUp, TrendingDown, Activity, Clock } from "lucide-react"
 import { toast } from "sonner"
 import { STOCK_AMM_ADDRESS, stockAmmAbi, PLAY_MONEY_ADDRESS, playMoneyAbi } from "@/lib/contracts/contracts"
 import { formatUnits } from "@/lib/utils"
@@ -36,6 +37,8 @@ export function TradeModal({
   const [cashAmount, setCashAmount] = useState("")
   const [shareAmount, setShareAmount] = useState("")
   const [isBuy, setIsBuy] = useState(true)
+  const [timeframe, setTimeframe] = useState("1D")
+  const [priceHistory, setPriceHistory] = useState<{ time: string; price: number }[]>([])
 
   const { data: balance } = useReadContract({
     address: PLAY_MONEY_ADDRESS,
@@ -53,6 +56,36 @@ export function TradeModal({
     query: { enabled: !!address && isOpen },
   })
 
+  // Watch live trades to push to chart
+  useWatchContractEvent({
+    address: STOCK_AMM_ADDRESS,
+    abi: stockAmmAbi,
+    eventName: "Trade",
+    onLogs: (logs) => {
+      logs.forEach((log) => {
+        if (Number(log.args.stockId) === stockId && log.args.newPrice) {
+          const newPrice = Number(log.args.newPrice) / 1e18
+          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+          setPriceHistory((prev) => [...prev.slice(-60), { time: timeStr, price: newPrice }])
+        }
+      })
+    },
+  })
+
+  useEffect(() => {
+    if (isOpen && currentPrice > 0 && priceHistory.length === 0) {
+      const now = new Date()
+      const initialPoints = Array.from({ length: 20 }, (_, i) => {
+        const t = new Date(now.getTime() - (20 - i) * 60000)
+        return {
+          time: t.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          price: basePrice + (currentPrice - basePrice) * (i / 19),
+        }
+      })
+      setPriceHistory(initialPoints)
+    }
+  }, [isOpen, currentPrice, basePrice, priceHistory.length])
+
   const { writeContract, data: hash, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess, isError, error } = useWaitForTransactionReceipt({ hash })
 
@@ -62,6 +95,10 @@ export function TradeModal({
   const estimatedOut = isBuy
     ? (Number(cashAmount) || 0) / (currentPrice || 1)
     : (Number(shareAmount) || 0) * (currentPrice || 1)
+
+  const prices = priceHistory.map((p) => p.price)
+  const highPrice = prices.length > 0 ? Math.max(...prices, currentPrice, basePrice) : currentPrice
+  const lowPrice = prices.length > 0 ? Math.min(...prices, currentPrice, basePrice) : currentPrice
 
   const handleTrade = async () => {
     if (!address) return
@@ -115,120 +152,209 @@ export function TradeModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in-0">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-background/80 backdrop-blur-md animate-in fade-in-0">
       <div
-        className="relative w-full max-w-md bg-card border rounded-2xl shadow-2xl p-6 space-y-5 animate-in zoom-in-95"
+        className="relative w-full max-w-5xl bg-card border rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 grid grid-cols-1 lg:grid-cols-12 max-h-[92vh] overflow-y-auto"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header */}
-        <div className="flex items-start justify-between">
+        {/* Close Button */}
+        <Button
+          variant="ghost"
+          size="icon"
+          className="absolute top-4 right-4 z-20 rounded-full h-9 w-9 bg-muted/60 hover:bg-muted"
+          onClick={onClose}
+        >
+          <X className="h-5 w-5" />
+        </Button>
+
+        {/* Left Side: Trading Platform Professional Chart View */}
+        <div className="lg:col-span-7 p-6 border-b lg:border-b-0 lg:border-r flex flex-col justify-between space-y-6">
+          {/* Stock Header */}
           <div>
-            <div className="flex items-center gap-2">
-              <h2 className="text-2xl font-extrabold">{ticker}</h2>
-              <Badge variant={isPositive ? "default" : "destructive"} className="gap-1 font-mono text-xs">
-                {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            <div className="flex items-center gap-3 mb-1">
+              <h2 className="text-3xl font-black tracking-tight">{ticker}</h2>
+              <span className="text-sm text-muted-foreground font-medium">{name}</span>
+              <Badge variant={isPositive ? "default" : "destructive"} className="gap-1 font-mono text-xs ml-auto lg:ml-0">
+                {isPositive ? <TrendingUp className="h-3.5 w-3.5" /> : <TrendingDown className="h-3.5 w-3.5" />}
                 {isPositive ? "+" : ""}{percentChange.toFixed(2)}%
               </Badge>
             </div>
-            <p className="text-xs text-muted-foreground">{name}</p>
+
+            <div className="flex items-baseline gap-3">
+              <div className="text-4xl font-extrabold tracking-tight">
+                ${currentPrice.toFixed(2)} <span className="text-base font-normal text-muted-foreground">SUSD</span>
+              </div>
+            </div>
           </div>
 
-          <Button variant="ghost" size="icon" className="rounded-full h-8 w-8" onClick={onClose}>
-            <X className="h-4 w-4" />
-          </Button>
-        </div>
-
-        {/* Pricing Info */}
-        <div className="bg-muted/40 p-3 rounded-xl flex items-center justify-between">
-          <div>
-            <span className="text-xs text-muted-foreground">Bonding Spot Price</span>
-            <div className="text-xl font-black">${currentPrice.toFixed(2)} SUSD</div>
+          {/* Stats Bar */}
+          <div className="grid grid-cols-3 gap-2 bg-muted/40 p-3 rounded-2xl text-xs">
+            <div>
+              <span className="text-muted-foreground flex items-center gap-1">
+                <Anchor className="h-3 w-3 text-primary" /> Market Open
+              </span>
+              <span className="font-bold text-sm text-foreground">${basePrice.toFixed(2)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Session High</span>
+              <span className="font-bold text-sm text-emerald-500">${highPrice.toFixed(2)}</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Session Low</span>
+              <span className="font-bold text-sm text-rose-500">${lowPrice.toFixed(2)}</span>
+            </div>
           </div>
-          <div className="text-right">
-            <span className="text-xs text-muted-foreground flex items-center gap-1">
-              <Anchor className="h-3 w-3 text-primary" /> 24h Anchor
+
+          {/* Timeframe Bar */}
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+              <Activity className="h-3.5 w-3.5 text-primary" /> Monad Live Market Graph
             </span>
-            <div className="text-sm font-semibold">${basePrice.toFixed(2)}</div>
+            <div className="flex gap-1 bg-muted p-1 rounded-xl text-xs font-medium">
+              {["1D", "1W", "1M", "ALL"].map((tf) => (
+                <button
+                  key={tf}
+                  onClick={() => setTimeframe(tf)}
+                  className={`px-2.5 py-1 rounded-lg transition-all ${
+                    timeframe === tf ? "bg-background shadow-sm font-bold text-primary" : "text-muted-foreground hover:text-foreground"
+                  }`}
+                >
+                  {tf}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Main Chart */}
+          <div className="h-64 sm:h-72 w-full pt-2">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={priceHistory}>
+                <defs>
+                  <linearGradient id="colorPrice" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor={isPositive ? "#10b981" : "#ef4444"} stopOpacity={0.4} />
+                    <stop offset="95%" stopColor={isPositive ? "#10b981" : "#ef4444"} stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+                <XAxis dataKey="time" tick={{ fontSize: 10 }} stroke="#888888" />
+                <YAxis domain={['auto', 'auto']} tick={{ fontSize: 10 }} stroke="#888888" />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: "hsl(var(--card))",
+                    border: "1px solid hsl(var(--border))",
+                    borderRadius: "12px",
+                    fontSize: "12px",
+                    boxShadow: "0 10px 15px -3px rgba(0,0,0,0.1)"
+                  }}
+                  formatter={(val: any) => [`$${Number(val).toFixed(2)} SUSD`, "Bonding Spot Price"]}
+                />
+                <ReferenceLine y={basePrice} stroke="#888888" strokeDasharray="4 4" label={{ value: `Open: $${basePrice.toFixed(2)}`, fill: '#888888', fontSize: 10 }} />
+                <Area
+                  type="monotone"
+                  dataKey="price"
+                  stroke={isPositive ? "#10b981" : "#ef4444"}
+                  strokeWidth={3}
+                  fillOpacity={1}
+                  fill="url(#colorPrice)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Buy / Sell Tabs */}
-        <div className="flex gap-2">
-          <Button
-            variant={isBuy ? "default" : "outline"}
-            onClick={() => setIsBuy(true)}
-            className="flex-1 font-bold"
-          >
-            <ArrowUpRight className="h-4 w-4 mr-1" /> Buy {ticker}
-          </Button>
-          <Button
-            variant={!isBuy ? "default" : "outline"}
-            onClick={() => setIsBuy(false)}
-            className="flex-1 font-bold"
-          >
-            <ArrowDownRight className="h-4 w-4 mr-1" /> Sell {ticker}
-          </Button>
-        </div>
+        {/* Right Side: Execution Panel */}
+        <div className="lg:col-span-5 p-6 bg-muted/20 flex flex-col justify-between space-y-5">
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-lg">Order Execution</h3>
+              <Badge variant="outline" className="gap-1 text-xs">
+                <Clock className="h-3 w-3 text-primary" /> Instant Finality
+              </Badge>
+            </div>
 
-        <Separator />
+            {/* Buy / Sell Tabs */}
+            <div className="flex gap-2">
+              <Button
+                variant={isBuy ? "default" : "outline"}
+                onClick={() => setIsBuy(true)}
+                className={`flex-1 font-bold py-5 ${isBuy ? "bg-emerald-600 hover:bg-emerald-700 text-white" : ""}`}
+              >
+                <ArrowUpRight className="h-4 w-4 mr-1" /> Buy {ticker}
+              </Button>
+              <Button
+                variant={!isBuy ? "default" : "outline"}
+                onClick={() => setIsBuy(false)}
+                className={`flex-1 font-bold py-5 ${!isBuy ? "bg-rose-600 hover:bg-rose-700 text-white" : ""}`}
+              >
+                <ArrowDownRight className="h-4 w-4 mr-1" /> Sell {ticker}
+              </Button>
+            </div>
 
-        {/* Amount Input */}
-        <div className="space-y-2">
-          <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            {isBuy ? "SUSD Amount to Spend" : "Shares to Sell"}
-          </label>
-          <Input
-            type="number"
-            step="0.0001"
-            value={isBuy ? cashAmount : shareAmount}
-            onChange={(e) => isBuy ? setCashAmount(e.target.value) : setShareAmount(e.target.value)}
-            placeholder={isBuy ? "e.g. 500 SUSD" : "e.g. 2.5 shares"}
-            disabled={isTradePending || !isConnected}
-            className="text-base py-5 font-mono"
-          />
-        </div>
+            <Separator />
 
-        {/* Estimates & Balance */}
-        <div className="text-xs text-muted-foreground space-y-1.5 bg-muted/30 p-3 rounded-xl">
-          <div className="flex justify-between">
-            <span>Estimated Received:</span>
-            <span className="font-mono font-bold text-foreground">
-              {isBuy ? `${estimatedOut.toFixed(4)} shares` : `$${estimatedOut.toFixed(2)} SUSD`}
-            </span>
+            {/* Amount Input */}
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                {isBuy ? "SUSD Amount to Spend" : "Shares to Sell"}
+              </label>
+              <Input
+                type="number"
+                step="0.0001"
+                value={isBuy ? cashAmount : shareAmount}
+                onChange={(e) => isBuy ? setCashAmount(e.target.value) : setShareAmount(e.target.value)}
+                placeholder={isBuy ? "e.g. 500 SUSD" : "e.g. 2.5 shares"}
+                disabled={isTradePending || !isConnected}
+                className="text-lg py-6 font-mono font-bold"
+              />
+            </div>
+
+            {/* Estimates & Balance */}
+            <div className="text-xs text-muted-foreground space-y-2 bg-card p-4 rounded-2xl border">
+              <div className="flex justify-between">
+                <span>Estimated Received:</span>
+                <span className="font-mono font-bold text-foreground text-sm">
+                  {isBuy ? `${estimatedOut.toFixed(4)} shares` : `$${estimatedOut.toFixed(2)} SUSD`}
+                </span>
+              </div>
+              <div className="flex justify-between">
+                <span>Your SUSD Balance:</span>
+                <span className="font-mono text-foreground font-semibold">
+                  {balance ? `${formatUnits(balance)} SUSD` : "Loading..."}
+                </span>
+              </div>
+            </div>
           </div>
-          <div className="flex justify-between">
-            <span>Your SUSD Balance:</span>
-            <span className="font-mono text-foreground">
-              {balance ? `${formatUnits(balance)} SUSD` : "Loading..."}
-            </span>
+
+          {/* Action Button */}
+          <div className="space-y-2 pt-4">
+            <Button
+              onClick={handleTrade}
+              disabled={
+                isTradePending ||
+                !isConnected ||
+                (isBuy && (!cashAmount || Number(cashAmount) <= 0)) ||
+                (!isBuy && (!shareAmount || Number(shareAmount) <= 0))
+              }
+              className={`w-full py-6 text-base font-extrabold shadow-xl ${
+                isBuy ? "bg-emerald-600 hover:bg-emerald-700 text-white" : "bg-rose-600 hover:bg-rose-700 text-white"
+              }`}
+            >
+              {isTradePending ? (
+                <>
+                  <Loader2 className="h-5 w-5 animate-spin mr-2" /> Confirming on Monad...
+                </>
+              ) : (
+                isBuy ? `Execute Buy Order (${ticker})` : `Execute Sell Order (${ticker})`
+              )}
+            </Button>
+
+            {!isConnected && (
+              <p className="text-xs text-center text-muted-foreground">
+                Connect wallet to execute orders
+              </p>
+            )}
           </div>
         </div>
-
-        {/* Action Button */}
-        <Button
-          onClick={handleTrade}
-          disabled={
-            isTradePending ||
-            !isConnected ||
-            (isBuy && (!cashAmount || Number(cashAmount) <= 0)) ||
-            (!isBuy && (!shareAmount || Number(shareAmount) <= 0))
-          }
-          className="w-full py-6 text-base font-bold shadow-lg"
-        >
-          {isTradePending ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin mr-2" /> Confirming on Monad...
-            </>
-          ) : (
-            isBuy ? `Execute Buy (${ticker})` : `Execute Sell (${ticker})`
-          )}
-        </Button>
-
-        {!isConnected && (
-          <p className="text-xs text-center text-muted-foreground">
-            Connect wallet to trade
-          </p>
-        )}
       </div>
     </div>
   )
