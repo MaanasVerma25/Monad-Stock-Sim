@@ -1,0 +1,14 @@
+name = "monad-market-sim"
+version = "1.0.0"
+
+[rpc_endpoints]
+  monad_testnet = "https://10143.rpc.thirdweb.com/${THIRDWEB_A3PI_KEY}"
+  anvil_local = "http://127.0.0.1:8545"
+
+[profile.default]
+  http-rpc = "http://127.0.0.1:8545"
+  chain-id = 10143
+
+[out]
+  manifest = "./foundry/manifest"
+  script-tree = "./foundry/script-tree"
