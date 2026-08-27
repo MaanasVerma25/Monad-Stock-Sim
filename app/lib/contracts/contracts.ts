@@ -111,16 +111,15 @@ export interface Stock {
   id: number;
   ticker: string;
   name: string;
-  defaultBasePrice: number;
 }
 
 export const STOCKS: Stock[] = [
-  { id: 0, ticker: "AAPL", name: "Apple Inc.", defaultBasePrice: 225.00 },
-  { id: 1, ticker: "TSLA", name: "Tesla Inc.", defaultBasePrice: 210.00 },
-  { id: 2, ticker: "NVDA", name: "NVIDIA Corp.", defaultBasePrice: 125.00 },
-  { id: 3, ticker: "GOOGL", name: "Alphabet Inc.", defaultBasePrice: 165.00 },
-  { id: 4, ticker: "MSFT", name: "Microsoft Corp.", defaultBasePrice: 415.00 },
-  { id: 5, ticker: "AMZN", name: "Amazon.com Inc.", defaultBasePrice: 175.00 },
-  { id: 6, ticker: "META", name: "Meta Platforms", defaultBasePrice: 510.00 },
-  { id: 7, ticker: "COIN", name: "Coinbase Global", defaultBasePrice: 200.00 },
+  { id: 0, ticker: "AAPL", name: "Apple Inc." },
+  { id: 1, ticker: "TSLA", name: "Tesla Inc." },
+  { id: 2, ticker: "NVDA", name: "NVIDIA Corp." },
+  { id: 3, ticker: "GOOGL", name: "Alphabet Inc." },
+  { id: 4, ticker: "MSFT", name: "Microsoft Corp." },
+  { id: 5, ticker: "AMZN", name: "Amazon.com Inc." },
+  { id: 6, ticker: "META", name: "Meta Platforms" },
+  { id: 7, ticker: "COIN", name: "Coinbase Global" },
 ];

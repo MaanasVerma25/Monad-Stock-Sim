@@ -3,7 +3,6 @@
 import { useAccount, useReadContract } from "wagmi"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
-import { formatUnits, formatPrice } from "@/lib/utils"
 import { PLAY_MONEY_ADDRESS, playMoneyAbi, STOCK_AMM_ADDRESS, stockAmmAbi, STOCKS } from "@/lib/contracts/contracts"
 
 export function Portfolio() {
@@ -18,14 +17,14 @@ export function Portfolio() {
   })
 
   const holdings = STOCKS.map((stock) => {
-    const { data: price } = useReadContract({
+    const { data: stockData } = useReadContract({
       address: STOCK_AMM_ADDRESS,
       abi: stockAmmAbi,
-      functionName: "getPrice",
+      functionName: "getStock",
       args: [BigInt(stock.id)],
       query: { refetchInterval: 5000 },
     })
-    return { stock, price }
+    return { stock, stockData }
   })
 
   const cashNum = cashBalance ? Number(cashBalance) / 1e18 : 0
@@ -62,14 +61,22 @@ export function Portfolio() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {holdings.map(({ stock, price }) => {
-              const priceNum = price ? Number(price) / 1e18 : stock.defaultBasePrice
+            {holdings.map(({ stock, stockData }) => {
+              const tickerStr = stockData?.[0] || stock.ticker
+              const nameStr = stockData?.[1] || stock.name
+              const basePrice = stockData?.[4] ? Number(stockData[4]) / 1e18 : 0
+              const currentPrice = stockData?.[6] ? Number(stockData[6]) / 1e18 : 0
+
               return (
                 <TableRow key={stock.id}>
-                  <TableCell className="font-bold">{stock.ticker}</TableCell>
-                  <TableCell className="text-muted-foreground">{stock.name}</TableCell>
-                  <TableCell className="text-right font-mono">${stock.defaultBasePrice.toFixed(2)}</TableCell>
-                  <TableCell className="text-right font-mono font-bold">${priceNum.toFixed(2)} SUSD</TableCell>
+                  <TableCell className="font-bold">{tickerStr}</TableCell>
+                  <TableCell className="text-muted-foreground">{nameStr}</TableCell>
+                  <TableCell className="text-right font-mono">
+                    {basePrice > 0 ? `$${basePrice.toFixed(2)}` : "Loading..."}
+                  </TableCell>
+                  <TableCell className="text-right font-mono font-bold">
+                    {currentPrice > 0 ? `$${currentPrice.toFixed(2)} SUSD` : "Loading..."}
+                  </TableCell>
                 </TableRow>
               )
             })}

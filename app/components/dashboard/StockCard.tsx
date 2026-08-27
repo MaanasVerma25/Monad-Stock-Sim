@@ -14,13 +14,13 @@ interface StockCardProps {
   stockId: number
   ticker: string
   name: string
-  defaultBasePrice: number
 }
 
-export function StockCard({ stockId, ticker, name, defaultBasePrice }: StockCardProps) {
+export function StockCard({ stockId, ticker, name }: StockCardProps) {
   const [priceHistory, setPriceHistory] = useState<number[]>([])
   const [maxPoints] = useState(100)
   const [isTradeOpen, setIsTradeOpen] = useState(false)
+  const [liveApiPrice, setLiveApiPrice] = useState<number>(0)
 
   const { data: stockData } = useReadContract({
     address: STOCK_AMM_ADDRESS,
@@ -38,6 +38,21 @@ export function StockCard({ stockId, ticker, name, defaultBasePrice }: StockCard
     query: { refetchInterval: 2000 },
   })
 
+  // If on-chain data is loading/uninitialized, fetch live stock quote dynamically from real API
+  useEffect(() => {
+    if (!stockData?.[4] && !spotPrice) {
+      fetch(`/api/stock-history?symbol=${ticker}`)
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.success && Array.isArray(data.history) && data.history.length > 0) {
+            const latest = data.history[data.history.length - 1].close
+            setLiveApiPrice(latest)
+          }
+        })
+        .catch(() => {})
+    }
+  }, [ticker, stockData, spotPrice])
+
   useWatchContractEvent({
     address: STOCK_AMM_ADDRESS,
     abi: stockAmmAbi,
@@ -54,8 +69,8 @@ export function StockCard({ stockId, ticker, name, defaultBasePrice }: StockCard
 
   const displayTicker = stockData?.[0] || ticker
   const displayName = stockData?.[1] || name
-  const basePrice = stockData?.[4] ? Number(stockData[4]) / 1e18 : defaultBasePrice
-  const currentPrice = spotPrice ? Number(spotPrice) / 1e18 : (stockData?.[6] ? Number(stockData[6]) / 1e18 : defaultBasePrice)
+  const basePrice = stockData?.[4] ? Number(stockData[4]) / 1e18 : (liveApiPrice || 100)
+  const currentPrice = spotPrice ? Number(spotPrice) / 1e18 : (stockData?.[6] ? Number(stockData[6]) / 1e18 : (liveApiPrice || 100))
 
   useEffect(() => {
     if (currentPrice > 0 && priceHistory.length === 0) {
@@ -101,7 +116,7 @@ export function StockCard({ stockId, ticker, name, defaultBasePrice }: StockCard
             </div>
             <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
               <Anchor className="h-3 w-3 text-primary/70" />
-              <span>24h Anchor: <strong>${basePrice.toFixed(2)}</strong></span>
+              <span>24h Anchor: <strong>${basePrice > 0 ? basePrice.toFixed(2) : "..."}</strong></span>
             </div>
           </div>
 

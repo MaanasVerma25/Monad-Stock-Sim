@@ -51,7 +51,6 @@ export default function TradePage() {
               stockId={stock.id}
               ticker={stock.ticker}
               name={stock.name}
-              defaultBasePrice={stock.defaultBasePrice}
             />
           ))}
         </div>
