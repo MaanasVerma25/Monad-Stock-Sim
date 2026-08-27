@@ -1,11 +1,11 @@
 "use client"
 
+import { Navbar } from "@/components/Navbar"
 import { ConnectButton } from "@/components/wallet/ConnectButton"
 import { ClaimFundsButton } from "@/components/onboarding/ClaimFundsButton"
 import { TradePanel } from "@/components/trade/TradePanel"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import Link from "next/link"
-import { Zap, ArrowUpRight, ArrowDownRight, Anchor } from "lucide-react"
+import { Anchor } from "lucide-react"
 import { STOCKS } from "@/lib/contracts/contracts"
 import { useAccount } from "wagmi"
 
@@ -14,26 +14,7 @@ export default function TradePage() {
 
   return (
     <div className="min-h-screen bg-background">
-      <header className="border-b">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <Link href="/" className="flex items-center gap-2">
-            <Zap className="h-6 w-6 text-primary" />
-            <span className="text-xl font-bold">Monad Market Sim</span>
-          </Link>
-          <div className="flex items-center gap-4">
-            <Link href="/dashboard" className="text-sm font-medium hover:text-primary">
-              Dashboard
-            </Link>
-            <Link href="/portfolio" className="text-sm font-medium hover:text-primary">
-              Portfolio
-            </Link>
-            <Link href="/leaderboard" className="text-sm font-medium hover:text-primary">
-              Leaderboard
-            </Link>
-            <ConnectButton />
-          </div>
-        </div>
-      </header>
+      <Navbar />
 
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="mb-8">
