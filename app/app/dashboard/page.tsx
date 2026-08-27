@@ -5,8 +5,7 @@ import { ClaimFundsButton } from "@/components/onboarding/ClaimFundsButton"
 import { StockCard } from "@/components/dashboard/StockCard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import Link from "next/link"
-import { Button } from "@/components/ui/button"
-import { Zap, TrendingUp, ExternalLink } from "lucide-react"
+import { Zap, TrendingUp, Anchor, Activity } from "lucide-react"
 import { STOCKS } from "@/lib/contracts/contracts"
 import { useAccount } from "wagmi"
 
@@ -38,9 +37,12 @@ export default function DashboardPage() {
 
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Live Dashboard</h1>
-          <p className="text-muted-foreground">
-            Real-time bonding curve prices for 5 synthetic stocks. Charts update instantly on every trade.
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
+            <Activity className="h-8 w-8 text-primary" />
+            Live Hybrid Market Dashboard
+          </h1>
+          <p className="text-muted-foreground max-w-3xl">
+            Real stock closing prices re-anchor every 24 hours. Intraday price discovery is driven by sensitive on-chain bonding curves on Monad.
           </p>
         </div>
 
@@ -61,32 +63,47 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4 mb-8">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
           {STOCKS.map((stock) => (
-            <StockCard key={stock.id} stockId={stock.id} ticker={stock.ticker} />
+            <StockCard
+              key={stock.id}
+              stockId={stock.id}
+              ticker={stock.ticker}
+              name={stock.name}
+              defaultBasePrice={stock.defaultBasePrice}
+            />
           ))}
         </div>
 
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
-              <TrendingUp className="h-5 w-5" />
-              How It Works
+              <TrendingUp className="h-5 w-5 text-primary" />
+              Hybrid Bonding-Curve Architecture
             </CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid md:grid-cols-3 gap-4 text-sm text-muted-foreground">
               <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="font-medium mb-2">Constant Product Bonding Curve</p>
-                <p>Each stock uses x*y=k pricing. Buying moves price up, selling moves price down.</p>
+                <p className="font-medium text-foreground mb-1 flex items-center gap-2">
+                  <Anchor className="h-4 w-4 text-primary" />
+                  24h Real Price Anchor
+                </p>
+                <p>Base price is updated daily from real market closing prices (AAPL, TSLA, NVDA, etc.).</p>
               </div>
               <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="font-medium mb-2">Live Event-Driven Updates</p>
-                <p>Charts subscribe to Trade events via wagmi's useWatchContractEvent. Sub-second updates on Monad.</p>
+                <p className="font-medium text-foreground mb-1 flex items-center gap-2">
+                  <Activity className="h-4 w-4 text-primary" />
+                  Sensitive Bonding Curve
+                </p>
+                <p>Every trade shifts the price dynamically relative to the daily anchor using constant product x*y=k math.</p>
               </div>
               <div className="p-4 bg-muted/50 rounded-lg">
-                <p className="font-medium mb-2">5 Independent Markets</p>
-                <p>MNDX, CHAI, VIBE, GRIT, TECH — each with separate reserves and price discovery.</p>
+                <p className="font-medium text-foreground mb-1 flex items-center gap-2">
+                  <Zap className="h-4 w-4 text-primary" />
+                  Instant On-Chain Execution
+                </p>
+                <p>Trades execute in &lt;1s on Monad parallel EVM. Contract events drive instant chart updates.</p>
               </div>
             </div>
           </CardContent>

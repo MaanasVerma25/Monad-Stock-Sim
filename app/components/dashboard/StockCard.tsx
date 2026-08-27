@@ -5,33 +5,34 @@ import { useReadContract, useWatchContractEvent } from "wagmi"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { TrendingUp, TrendingDown } from "lucide-react"
-import { formatPrice, formatUnits } from "@/lib/utils"
+import { TrendingUp, TrendingDown, Anchor } from "lucide-react"
 import { STOCK_AMM_ADDRESS, stockAmmAbi } from "@/lib/contracts/contracts"
 
 interface StockCardProps {
   stockId: number
   ticker: string
+  name: string
+  defaultBasePrice: number
 }
 
-export function StockCard({ stockId, ticker }: StockCardProps) {
+export function StockCard({ stockId, ticker, name, defaultBasePrice }: StockCardProps) {
   const [priceHistory, setPriceHistory] = useState<number[]>([])
   const [maxPoints] = useState(100)
 
-  const { data: price } = useReadContract({
+  const { data: stockData } = useReadContract({
     address: STOCK_AMM_ADDRESS,
     abi: stockAmmAbi,
-    functionName: "getPrice",
-    args: [stockId],
+    functionName: "getStock",
+    args: [BigInt(stockId)],
     query: { refetchInterval: 2000 },
   })
 
-  const { data: tickerName } = useReadContract({
+  const { data: spotPrice } = useReadContract({
     address: STOCK_AMM_ADDRESS,
     abi: stockAmmAbi,
-    functionName: "getTicker",
-    args: [stockId],
-    query: { enabled: false },
+    functionName: "getPrice",
+    args: [BigInt(stockId)],
+    query: { refetchInterval: 2000 },
   })
 
   useWatchContractEvent({
@@ -40,7 +41,7 @@ export function StockCard({ stockId, ticker }: StockCardProps) {
     eventName: "Trade",
     onLogs: (logs) => {
       logs.forEach((log) => {
-        if (Number(log.args.stockId) === stockId) {
+        if (Number(log.args.stockId) === stockId && log.args.newPrice) {
           const newPrice = Number(log.args.newPrice) / 1e18
           setPriceHistory((prev) => [...prev.slice(-maxPoints + 1), newPrice])
         }
@@ -48,19 +49,20 @@ export function StockCard({ stockId, ticker }: StockCardProps) {
     },
   })
 
-  useEffect(() => {
-    if (price && priceHistory.length === 0) {
-      const initialPrice = Number(price) / 1e18
-      setPriceHistory(Array(maxPoints).fill(initialPrice))
-    }
-  }, [price, priceHistory.length, maxPoints])
+  const displayTicker = stockData?.[0] || ticker
+  const displayName = stockData?.[1] || name
+  const basePrice = stockData?.[4] ? Number(stockData[4]) / 1e18 : defaultBasePrice
+  const currentPrice = spotPrice ? Number(spotPrice) / 1e18 : (stockData?.[6] ? Number(stockData[6]) / 1e18 : defaultBasePrice)
 
-  const displayTicker = tickerName || ticker
-  const currentPrice = price ? Number(price) / 1e18 : 0
-  const priceChange = priceHistory.length >= 2
-    ? priceHistory[priceHistory.length - 1] - priceHistory[priceHistory.length - 2]
-    : 0
-  const isPositive = priceChange >= 0
+  useEffect(() => {
+    if (currentPrice > 0 && priceHistory.length === 0) {
+      setPriceHistory(Array(maxPoints).fill(currentPrice))
+    }
+  }, [currentPrice, priceHistory.length, maxPoints])
+
+  const priceDiffFromBase = currentPrice - basePrice
+  const percentChange = basePrice > 0 ? (priceDiffFromBase / basePrice) * 100 : 0
+  const isPositive = priceDiffFromBase >= 0
 
   const chartData = priceHistory.map((price, index) => ({
     time: index,
@@ -68,35 +70,50 @@ export function StockCard({ stockId, ticker }: StockCardProps) {
   }))
 
   return (
-    <Card className="h-full">
+    <Card className="h-full flex flex-col justify-between hover:border-primary/50 transition-colors">
       <CardHeader className="pb-2">
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-lg">{displayTicker}</CardTitle>
-          <Badge variant={isPositive ? "default" : "destructive"} className="gap-1">
+        <div className="flex items-start justify-between gap-2">
+          <div>
+            <CardTitle className="text-xl font-bold">{displayTicker}</CardTitle>
+            <p className="text-xs text-muted-foreground truncate max-w-[140px]">{displayName}</p>
+          </div>
+          <Badge variant={isPositive ? "default" : "destructive"} className="gap-1 font-mono text-xs">
             {isPositive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-            {priceChange >= 0 ? "+" : ""}{priceChange.toFixed(4)}
+            {isPositive ? "+" : ""}{percentChange.toFixed(2)}%
           </Badge>
         </div>
       </CardHeader>
-      <CardContent className="pb-2">
-        <div className="text-3xl font-bold mb-4">
-          {currentPrice > 0 ? `${currentPrice.toFixed(4)} SUSD` : "Loading..."}
+      <CardContent className="pb-2 flex-1 flex flex-col justify-between">
+        <div className="mb-3">
+          <div className="text-2xl font-extrabold tracking-tight">
+            ${currentPrice > 0 ? currentPrice.toFixed(2) : "..."} <span className="text-xs font-normal text-muted-foreground">SUSD</span>
+          </div>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+            <Anchor className="h-3 w-3 text-primary/70" />
+            <span>24h Anchor: <strong>${basePrice.toFixed(2)}</strong></span>
+          </div>
         </div>
-        <div className="h-40">
+
+        <div className="h-32 w-full mt-2">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" opacity={0.3} />
-              <XAxis dataKey="time" tickLine={false} axisLine={false} tick={{ display: false }} />
-              <YAxis tickLine={false} axisLine={false} tick={{ fontSize: 10 }} />
+              <CartesianGrid strokeDasharray="3 3" opacity={0.15} />
+              <XAxis dataKey="time" hide />
+              <YAxis domain={['auto', 'auto']} hide />
               <Tooltip
-                contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
-                formatter={(value) => [`${value.toFixed(4)} SUSD`, "Price"]}
+                contentStyle={{
+                  backgroundColor: "hsl(var(--card))",
+                  border: "1px solid hsl(var(--border))",
+                  borderRadius: "8px",
+                  fontSize: "12px"
+                }}
+                formatter={(value: any) => [`$${Number(value).toFixed(2)} SUSD`, "Bonding Spot Price"]}
               />
               <Line
                 type="monotone"
                 dataKey="price"
-                stroke={isPositive ? "hsl(var(--primary))" : "hsl(var(--destructive))"}
-                strokeWidth={2}
+                stroke={isPositive ? "#10b981" : "#ef4444"}
+                strokeWidth={2.5}
                 dot={false}
                 activeDot={{ r: 4 }}
               />

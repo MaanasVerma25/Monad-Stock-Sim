@@ -1,27 +1,29 @@
-# ⚡ Monad Market Sim
+# ⚡ Monad Market Sim — Hybrid Equity AMM
 
-> A fully on-chain stock market simulator built for the **Monad Blitz Hackathon** — demonstrating sub-second trade finality, live bonding-curve price discovery, and real-time charting with zero backend.
-
----
-
-## 🧠 What Is It?
-
-**Monad Market Sim** is a decentralized paper-trading platform where users can trade five synthetic stocks (`MNDX`, `CHAI`, `VIBE`, `GRIT`, `TECH`) using a simulated currency called **SimUSD (SUSD)**. Every price move is governed by a **constant-product bonding curve** (`x * y = k`) deployed on **Monad Testnet** — the same AMM math that powers Uniswap, but applied to a stock-market metaphor.
-
-The entire state lives on-chain. There is no backend server, no database, and no oracle. The frontend subscribes directly to smart contract events for sub-second live chart updates.
+> A fully on-chain hybrid stock market simulator built for **Monad** — combining **24-hour real equity price anchors** (AAPL, TSLA, NVDA, GOOGL, MSFT, etc.) with **sensitive intraday bonding curves** (`x * y = k`).
 
 ---
 
-## 🎯 Why It's Interesting
+## 🧠 The Hybrid Model
+
+Unlike pure AMMs or oracle-only platforms, **Monad Market Sim** uses a hybrid price engine:
+
+1. **Daily Real-World Anchoring**: Once every 24 hours, an automated price setter updates the base prices on-chain using yesterday's real closing prices from NYSE/NASDAQ.
+2. **Sensitive Bonding Curve Price Discovery**: Intraday price movements are driven entirely by user trades using a constant product bonding curve (`x * y = k`). With 2,000 SUSD share liquidity per pool, every trade visibly shifts the price relative to the daily anchor.
+3. **Sub-second Event-Driven UI**: Built on Monad's high-throughput parallel EVM, contract events instantly push price updates to Next.js charts without requiring WebSockets.
+
+---
+
+## 🎯 Key Features & Benefits
 
 | Feature | Details |
 |---|---|
-| ⚡ Sub-second finality | Monad's parallel EVM confirms trades in < 1 second |
-| 📈 Fully on-chain price discovery | Bonding curves replace order books — no matching engine needed |
-| 🔴 Real-time charts with no WebSockets | `useWatchContractEvent` from wagmi drives live Recharts updates |
-| 🆓 Zero-cost sandbox | Claim 100,000 SUSD for free and start trading immediately |
-| 🏆 Competitive leaderboard | Rankings computed client-side from on-chain `Trade` events |
-| 🚫 No backend | Fully deployable as a static/SSR site (Vercel) |
+| 📈 **Real Equity Tickers** | AAPL, TSLA, NVDA, GOOGL, MSFT, AMZN, META, COIN, and extensible to hundreds more |
+| ⚓ **24-Hour Base Anchor** | Daily re-anchoring to real closing prices prevents unrealistic drift |
+| ⚡ **Sensitive Price Shifts** | Trades dynamically push the price up (buys) or down (sells) instantly |
+| 🌐 **Dynamic Multi-Stock Registry** | Smart contract supports adding unlimited stocks dynamically via `addStock()` |
+| 🤖 **Automated Oracle Script** | Included `price-setter` script updates daily prices on Monad automatically |
+| 🆓 **Zero-Cost Sandbox** | Claim 100,000 SimUSD (SUSD) from the faucet and start trading |
 
 ---
 
@@ -32,168 +34,88 @@ monad-market-sim/
 ├── contracts/                  # Foundry (Solidity) project
 │   ├── contracts/
 │   │   ├── PlayMoney.sol       # ERC-20 SimUSD (SUSD) faucet token
-│   │   └── StockAMM.sol        # Bonding-curve AMM for 5 stocks
-│   ├── script/                 # Foundry deployment scripts
-│   ├── test/
-│   │   └── StockAMM.t.sol      # Foundry forge tests
-│   └── foundry.toml            # Monad testnet + local Anvil config
+│   │   └── StockAMM.sol        # Dynamic multi-stock hybrid AMM contract
+│   ├── script/
+│   │   └── Deploy.s.sol        # Deploys contract with initial equity prices
+│   └── test/
+│       └── StockAMM.t.sol      # Foundry unit tests for dynamic pricing & resets
+│
+├── price-setter/               # Daily Oracle Price Setter Script
+│   ├── index.ts                # Fetches real closing prices & submits batch tx
+│   └── package.json
 │
 └── app/                        # Next.js 14 (App Router) frontend
     ├── app/
-    │   ├── page.tsx            # Landing / hero page
-    │   ├── onboarding/         # Wallet connect + SUSD claim flow
-    │   ├── dashboard/          # Live price charts for all 5 stocks
-    │   ├── trade/              # Buy / sell panel with output estimates
-    │   ├── portfolio/          # Cash balance + holdings value
-    │   └── leaderboard/        # Top traders ranked by portfolio value
-    ├── components/             # Reusable React components
-    ├── lib/
-    │   ├── wagmi/config.ts     # Wagmi + WalletConnect + Monad chain config
-    │   └── contracts/          # ABI definitions and contract addresses
-    └── .env.example            # Environment variable template
+    │   ├── dashboard/          # Real-time stock cards with 24h anchors & charts
+    │   ├── trade/              # Buy/Sell trading panel with estimated outputs
+    │   ├── portfolio/          # Real-time cash balance and market prices
+    │   └── leaderboard/        # Rank traders by portfolio value
+    ├── components/             # Reusable React & wagmi components
+    └── lib/contracts/          # Wagmi ABI definitions & stock metadata
 ```
 
 ---
 
-## 🔬 How It Works
+## 🔬 Smart Contract Details (`StockAMM.sol`)
 
-### 1. SimUSD — The Play Currency (`PlayMoney.sol`)
-
-`PlayMoney` is a standard **OpenZeppelin ERC-20** with one special twist: a one-time faucet.
-
+### Pool Struct
 ```solidity
-function claimStarterFunds() external {
-    require(!hasClaimed[msg.sender], "Already claimed");
-    _mint(msg.sender, 100_000 * 10**18); // 100,000 SUSD
-    hasClaimed[msg.sender] = true;
+struct StockInfo {
+    string ticker;
+    string name;
+    uint256 cashReserve;
+    uint256 shareReserve;
+    uint256 basePrice;  // Yesterday's real close (1e18 scaled)
+    uint256 lastReset;  // Timestamp of last 24h reset
 }
 ```
 
-- Token: **SimUSD (SUSD)**, 18 decimals
-- Each wallet can claim **100,000 SUSD** exactly once
-- No owner privileges needed after deployment
-
----
-
-### 2. The AMM — Bonding Curve Price Engine (`StockAMM.sol`)
-
-Each of the 5 stocks has two reserve pools — `cashReserve[i]` and `shareReserve[i]` — maintained at constant product `k = cashReserve × shareReserve`.
-
-#### Buying shares
-
-```
-sharesOut = (shareReserve × cashIn) / (cashReserve + cashIn)
-```
-
-Sending SUSD into the pool raises `cashReserve`, shrinks `shareReserve`, and the spot price (`cashReserve / shareReserve`) **increases**.
-
-#### Selling shares
-
-```
-cashOut = (cashReserve × sharesIn) / (shareReserve + sharesIn)
-```
-
-Sending shares into the pool raises `shareReserve`, shrinks `cashReserve`, and the spot price **decreases**.
-
-#### Spot price
-
+### Daily Price Re-Anchoring
 ```solidity
-function getPrice(uint8 stockId) external view returns (uint256) {
-    return (cashReserve[stockId] * 1e18) / shareReserve[stockId];
+function setDailyBasePrice(uint256 stockId, uint256 realPrice) public onlyOwner {
+    StockInfo storage stock = stocks[stockId];
+    stock.cashReserve = (realPrice * shareLiquidity) / 1e18;
+    stock.shareReserve = shareLiquidity;
+    stock.basePrice = realPrice;
+    stock.lastReset = block.timestamp;
+    emit DailyPriceSet(stockId, realPrice, block.timestamp);
 }
 ```
 
-Every trade emits a `Trade` event carrying `newPrice`, which the frontend uses to update charts instantly — no polling required.
-
-```solidity
-event Trade(
-    address indexed user,
-    uint8 indexed stockId,
-    bool isBuy,
-    uint256 amountIn,
-    uint256 amountOut,
-    uint256 newPrice
-);
-```
-
 ---
 
-### 3. The Frontend — Next.js + wagmi + Recharts
+## 🤖 Daily Price Setter Oracle (`price-setter/`)
 
-| Layer | Technology |
-|---|---|
-| Framework | Next.js 14 (App Router) |
-| Language | TypeScript |
-| Web3 | wagmi v2 + viem |
-| Wallet | MetaMask (WalletConnect ready) |
-| Charts | Recharts (event-driven, no polling) |
-| Notifications | Sonner toasts |
-| UI Components | shadcn/ui + Radix UI |
-| Styling | Tailwind CSS |
-| Deployment | Vercel (no server needed) |
+To run the daily price setter script:
 
-**Key wagmi hooks used:**
-- `useWatchContractEvent` — subscribes to `Trade` events for live chart updates
-- `useReadContract` — reads prices, balances, claim status
-- `useWriteContract` — executes `buy`, `sell`, `claimStarterFunds`
-- `useWaitForTransactionReceipt` — drives pending → confirmed toast lifecycle
+```bash
+cd price-setter
+npm install
+cp .env.example .env
+# Set PRIVATE_KEY and STOCK_AMM_ADDRESS in .env
+npm run update-prices
+```
 
 ---
 
 ## 🚀 Quick Start
 
-### Prerequisites
-
-- [Foundry](https://book.getfoundry.sh/getting-started/installation) (`forge`, `cast`, `anvil`)
-- Node.js >= 18
-- MetaMask browser extension
-- A [Thirdweb API key](https://thirdweb.com/dashboard) (for Monad testnet RPC)
-- A [WalletConnect Project ID](https://cloud.walletconnect.com)
-
----
-
-### Step 1 — Install Dependencies
+### 1. Install Dependencies
 
 ```bash
-# Smart contracts
-cd contracts
-forge install
-
 # Frontend
-cd ../app
+cd app
 npm install
 ```
 
-### Step 2 — Configure Environment
+### 2. Configure Environment
 
 ```bash
 cd app
 cp .env.example .env.local
 ```
 
-Fill in `.env.local`:
-
-```env
-NEXT_PUBLIC_THIRDWEB_API_KEY=your_thirdweb_api_key
-NEXT_PUBLIC_WAGMI_PROJECT_ID=your_walletconnect_project_id
-NEXT_PUBLIC_PLAY_MONEY_ADDRESS=0x...   # filled after deployment
-NEXT_PUBLIC_STOCK_AMM_ADDRESS=0x...   # filled after deployment
-```
-
-### Step 3 — Deploy Contracts Locally
-
-```bash
-# Terminal 1: start local chain
-cd contracts
-anvil
-
-# Terminal 2: deploy
-forge script script/Deploy.s.sol --rpc-url http://127.0.0.1:8545 --broadcast
-```
-
-Copy the printed contract addresses into `.env.local`.
-
-### Step 4 — Run the App
+### 3. Run Dev Server
 
 ```bash
 cd app
@@ -204,105 +126,16 @@ Open [http://localhost:3000](http://localhost:3000).
 
 ---
 
-## 🌐 Monad Testnet Deployment
-
-### Deploy Contracts
-
-```bash
-cd contracts
-forge script script/Deploy.s.sol \
-  --rpc-url monad_testnet \
-  --broadcast \
-  --private-key $PRIVATE_KEY
-```
-
-> **Note:** Add your Thirdweb API key as `THIRDWEB_API_KEY` in your shell environment. The RPC endpoint `https://10143.rpc.thirdweb.com/${THIRDWEB_API_KEY}` is pre-configured in `foundry.toml`.
-
-### Deploy Frontend to Vercel
-
-```bash
-cd app
-vercel --prod
-```
-
-Add your `.env.local` variables to the Vercel project settings before deploying.
-
----
-
-## 🧪 Running Tests
-
-```bash
-cd contracts
-forge test -vvv
-```
-
-Tests cover buy/sell invariants, zero-amount guards, liquidity limits, and price calculations.
-
----
-
 ## 🎮 Demo Flow
 
-1. **Connect** MetaMask → switch to **Monad Testnet** (Chain ID: `10143`)
-2. **Claim** 100,000 SUSD on the Onboarding page
-3. **Dashboard** → see live charts for all 5 stocks at their initial price (1 SUSD = 1 share)
-4. **Trade** → buy `MNDX` with 1,000 SUSD — watch the chart spike immediately
-5. **Sell** `MNDX` shares — watch price drop back
-6. **Portfolio** → see your current holdings valued at live market prices
-7. **Leaderboard** → see your rank vs all other traders (computed from on-chain events, client-side)
-
----
-
-## ⚙️ Contract Reference
-
-### `PlayMoney.sol`
-
-| Function | Visibility | Description |
-|---|---|---|
-| `claimStarterFunds()` | `external` | Mints 100,000 SUSD to caller (once per address) |
-| `hasClaimed(address)` | `public view` | Returns whether an address has already claimed |
-| `balanceOf(address)` | `public view` | Standard ERC-20 balance |
-
-### `StockAMM.sol`
-
-| Function | Visibility | Description |
-|---|---|---|
-| `buy(stockId, cashAmount)` | `external` | Spend SUSD, receive shares |
-| `sell(stockId, shareAmount)` | `external` | Spend shares, receive SUSD |
-| `getPrice(stockId)` | `external view` | Spot price in SUSD per share (1e18 scaled) |
-| `getTicker(stockId)` | `external pure` | Returns ticker string for a stock ID |
-| `cashReserve[5]` | `public` | SUSD liquidity in each pool |
-| `shareReserve[5]` | `public` | Share liquidity in each pool |
-
-### Stock IDs
-
-| ID | Ticker |
-|---|---|
-| 0 | MNDX |
-| 1 | CHAI |
-| 2 | VIBE |
-| 3 | GRIT |
-| 4 | TECH |
-
----
-
-## 🧱 Tech Stack
-
-| Layer | Technology |
-|---|---|
-| Smart Contracts | Solidity ^0.8.20, OpenZeppelin 5.x |
-| Contract Toolchain | Foundry (forge / cast / anvil) |
-| Frontend Framework | Next.js 14 (App Router), TypeScript |
-| Web3 Layer | wagmi v2 + viem (no ethers.js) |
-| Wallet | MetaMask connector |
-| Charts | Recharts 2.x |
-| UI | shadcn/ui, Radix UI, Lucide icons |
-| Styling | Tailwind CSS 3.x |
-| Notifications | Sonner |
-| Deployment | Vercel |
-| Chain | Monad Testnet (Chain ID: 10143) |
+1. Connect MetaMask to **Monad Testnet** (Chain ID: `10143`)
+2. Claim 100,000 SUSD starter funds
+3. View Dashboard to see live prices anchored to AAPL ($225), TSLA ($210), NVDA ($125), etc.
+4. Trade any stock — see immediate price impact due to high bonding curve sensitivity
+5. Run `price-setter` script to simulate the daily 24h re-anchoring to new closing prices
 
 ---
 
 ## 📄 License
 
-MIT — built for the **Monad Blitz Hackathon**.
+MIT — Built for **Monad Blitz Hackathon**.

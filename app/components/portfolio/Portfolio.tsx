@@ -22,16 +22,13 @@ export function Portfolio() {
       address: STOCK_AMM_ADDRESS,
       abi: stockAmmAbi,
       functionName: "getPrice",
-      args: [stock.id],
+      args: [BigInt(stock.id)],
       query: { refetchInterval: 5000 },
     })
     return { stock, price }
   })
 
-  const totalValue = holdings.reduce((acc, h) => {
-    if (!h.price) return acc
-    return acc + Number(h.price) / 1e18 * 0 // We don't have share balance easily without tracking events
-  }, Number(cashBalance || 0) / 1e18)
+  const cashNum = cashBalance ? Number(cashBalance) / 1e18 : 0
 
   if (!isConnected) {
     return (
@@ -46,44 +43,38 @@ export function Portfolio() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Portfolio</CardTitle>
+        <CardTitle>Portfolio Summary</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="mb-6">
-          <div className="text-2xl font-bold">
-            Total Value: {totalValue.toFixed(2)} SUSD
-          </div>
-          <div className="text-muted-foreground">
-            Cash: {cashBalance ? formatUnits(cashBalance) : "Loading..."} SUSD
+        <div className="mb-6 bg-muted/40 p-4 rounded-lg">
+          <div className="text-3xl font-extrabold tracking-tight">
+            ${cashNum.toFixed(2)} <span className="text-sm font-normal text-muted-foreground">SUSD Cash Balance</span>
           </div>
         </div>
 
         <Table>
           <TableHeader>
             <TableRow>
-              <TableHead>Stock</TableHead>
-              <TableHead className="text-right">Price</TableHead>
-              <TableHead className="text-right">Shares</TableHead>
-              <TableHead className="text-right">Value</TableHead>
+              <TableHead>Ticker</TableHead>
+              <TableHead>Company</TableHead>
+              <TableHead className="text-right">24h Anchor Base</TableHead>
+              <TableHead className="text-right">Current Bonding Price</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {holdings.map(({ stock, price }) => (
-              <TableRow key={stock.id}>
-                <TableCell className="font-medium">{stock.ticker}</TableCell>
-                <TableCell className="text-right font-mono">
-                  {price ? formatPrice(price) : "Loading..."} SUSD
-                </TableCell>
-                <TableCell className="text-right font-mono">0.0000</TableCell>
-                <TableCell className="text-right font-mono font-medium">0.00 SUSD</TableCell>
-              </TableRow>
-            ))}
+            {holdings.map(({ stock, price }) => {
+              const priceNum = price ? Number(price) / 1e18 : stock.defaultBasePrice
+              return (
+                <TableRow key={stock.id}>
+                  <TableCell className="font-bold">{stock.ticker}</TableCell>
+                  <TableCell className="text-muted-foreground">{stock.name}</TableCell>
+                  <TableCell className="text-right font-mono">${stock.defaultBasePrice.toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-mono font-bold">${priceNum.toFixed(2)} SUSD</TableCell>
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
-
-        <p className="text-sm text-muted-foreground mt-4">
-          Share balances require event indexing. For demo, shows price data only.
-        </p>
       </CardContent>
     </Card>
   )
