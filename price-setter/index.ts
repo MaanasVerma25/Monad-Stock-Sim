@@ -5,6 +5,8 @@ import * as dotenv from 'dotenv'
 
 dotenv.config()
 
+const MARKETSTACK_API_KEY = process.env.MARKETSTACK_API_KEY || '6e489690b975928eea1036ba3b444d71'
+
 const monadTestnet = defineChain({
   id: 10143,
   name: 'Monad Testnet',
@@ -47,22 +49,19 @@ const STOCKS: StockTarget[] = [
 
 async function fetchRealMarketOpenPrice(ticker: string, fallbackPrice: number): Promise<number> {
   try {
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=1d`
-    const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' } })
+    const url = `http://api.marketstack.com/v1/eod?access_key=${MARKETSTACK_API_KEY}&symbols=${ticker}&limit=1`
+    const res = await fetch(url)
     if (res.ok) {
       const data = await res.json()
-      const resultMeta = data?.chart?.result?.[0]?.meta
-      const openPrices = data?.chart?.result?.[0]?.indicators?.quote?.[0]?.open
-      
-      // Get market open price (or regular market open / fallback)
-      const openPrice = openPrices?.[0] || resultMeta?.regularMarketOpen || resultMeta?.regularMarketPrice
+      const item = data?.data?.[0]
+      const openPrice = item?.open || item?.close
       if (typeof openPrice === 'number' && openPrice > 0) {
-        console.log(`Fetched Market Open price for ${ticker}: $${openPrice.toFixed(2)}`)
+        console.log(`Fetched Marketstack open price for ${ticker}: $${openPrice.toFixed(2)}`)
         return openPrice
       }
     }
   } catch (err) {
-    console.warn(`Could not fetch market open price for ${ticker}, using default open: $${fallbackPrice}`)
+    console.warn(`Could not fetch Marketstack open price for ${ticker}, using default open: $${fallbackPrice}`)
   }
   return fallbackPrice
 }
@@ -77,7 +76,7 @@ async function main() {
   }
 
   const account = privateKeyToAccount(privateKey)
-  console.log(`Executing daily market-open price anchor update from: ${account.address}`)
+  console.log(`Executing daily market-open price anchor update via Marketstack from: ${account.address}`)
 
   const publicClient = createPublicClient({
     chain: monadTestnet,
