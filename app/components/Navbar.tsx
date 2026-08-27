@@ -3,15 +3,14 @@
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { ConnectButton } from "@/components/wallet/ConnectButton"
-import { Zap, BarChart3, TrendingUp, Wallet, Trophy, LayoutDashboard } from "lucide-react"
+import { Zap, LayoutDashboard, Wallet, Trophy } from "lucide-react"
 
 export function Navbar() {
   const pathname = usePathname()
 
   const navLinks = [
     { href: "/", label: "Home", icon: Zap },
-    { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-    { href: "/trade", label: "Trade", icon: TrendingUp },
+    { href: "/dashboard", label: "Markets & Trade", icon: LayoutDashboard },
     { href: "/portfolio", label: "Portfolio", icon: Wallet },
     { href: "/leaderboard", label: "Leaderboard", icon: Trophy },
   ]

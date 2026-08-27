@@ -5,7 +5,7 @@ import { ConnectButton } from "@/components/wallet/ConnectButton"
 import { ClaimFundsButton } from "@/components/onboarding/ClaimFundsButton"
 import { StockCard } from "@/components/dashboard/StockCard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Anchor, Activity, Zap } from "lucide-react"
+import { Anchor, Activity, Zap, MousePointerClick } from "lucide-react"
 import { STOCKS } from "@/lib/contracts/contracts"
 import { useAccount } from "wagmi"
 
@@ -20,10 +20,11 @@ export default function DashboardPage() {
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
             <Activity className="h-8 w-8 text-primary" />
-            Live Hybrid Market Dashboard
+            Live Hybrid Market & Trade
           </h1>
-          <p className="text-muted-foreground max-w-3xl">
-            Real stock closing prices re-anchor every 24 hours. Intraday price discovery is driven by sensitive on-chain bonding curves on Monad.
+          <p className="text-muted-foreground max-w-3xl flex items-center gap-2">
+            <MousePointerClick className="h-4 w-4 text-primary shrink-0" />
+            Click any stock card below to open its instant Buy / Sell trading panel. Real 24h market anchors with sensitive on-chain bonding curves on Monad.
           </p>
         </div>
 

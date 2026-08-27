@@ -3,9 +3,9 @@
 import { Navbar } from "@/components/Navbar"
 import { ConnectButton } from "@/components/wallet/ConnectButton"
 import { ClaimFundsButton } from "@/components/onboarding/ClaimFundsButton"
-import { TradePanel } from "@/components/trade/TradePanel"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Anchor } from "lucide-react"
+import { StockCard } from "@/components/dashboard/StockCard"
+import { Card, CardContent } from "@/components/ui/card"
+import { Activity } from "lucide-react"
 import { STOCKS } from "@/lib/contracts/contracts"
 import { useAccount } from "wagmi"
 
@@ -16,11 +16,14 @@ export default function TradePage() {
     <div className="min-h-screen bg-background">
       <Navbar />
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Trade Real Equity Markets</h1>
-          <p className="text-muted-foreground">
-            Trade top equities anchored to real 24-hour closing prices. High-sensitivity bonding curves move prices live with every transaction.
+          <h1 className="text-3xl font-bold mb-2 flex items-center gap-2">
+            <Activity className="h-8 w-8 text-primary" />
+            Markets & Live Trade
+          </h1>
+          <p className="text-muted-foreground max-w-3xl">
+            Click on any stock card below to open the buy/sell trading panel. All prices are anchored to real market closes with instant bonding curve execution.
           </p>
         </div>
 
@@ -41,9 +44,9 @@ export default function TradePage() {
           </Card>
         )}
 
-        <div className="grid md:grid-cols-2 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 mb-8">
           {STOCKS.map((stock) => (
-            <TradePanel
+            <StockCard
               key={stock.id}
               stockId={stock.id}
               ticker={stock.ticker}
@@ -52,34 +55,6 @@ export default function TradePage() {
             />
           ))}
         </div>
-
-        <Card className="mt-8">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Anchor className="h-5 w-5 text-primary" />
-              Hybrid Bonding Curve Details
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid md:grid-cols-2 gap-4 text-sm text-muted-foreground">
-              <div>
-                <p className="font-medium text-foreground mb-2">24h Real Price Anchor</p>
-                <ul className="space-y-1 list-disc list-inside">
-                  <li>Base prices anchor daily to real market closes (e.g. AAPL $225, TSLA $210)</li>
-                  <li>Automated oracle updates reset pool reserves every 24 hours</li>
-                </ul>
-              </div>
-              <div>
-                <p className="font-medium text-foreground mb-2">High Sensitivity Intraday Pricing</p>
-                <ul className="space-y-1 list-disc list-inside">
-                  <li>Pool share liquidity set to 2,000 shares per market</li>
-                  <li>Trades shift spot prices sensitively relative to the 24h anchor</li>
-                  <li>Instant sub-second finality on Monad testnet</li>
-                </ul>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
       </main>
     </div>
   )
