@@ -119,7 +119,7 @@ export function StockCard({ stockId, ticker, name }: StockCardProps) {
         <CardContent className="p-0 flex-1 flex flex-col justify-between">
           <div className="mb-2">
             <div className="font-mono text-2xl font-bold text-white tracking-tight">
-              ${currentPrice > 0 ? currentPrice.toFixed(2) : "..."}
+              ${currentPrice > 0 ? (currentPrice % 1 !== 0 ? currentPrice.toFixed(4) : currentPrice.toFixed(2)) : "..."}
             </div>
             <div className="flex items-center gap-1.5 text-xs text-[#9a9a9a] font-mono mt-1">
               <Anchor className="h-3 w-3 text-white" />
@@ -142,7 +142,7 @@ export function StockCard({ stockId, ticker, name }: StockCardProps) {
                     fontFamily: "monospace",
                     fontSize: "12px"
                   }}
-                  formatter={(value: any) => [`$${Number(value).toFixed(2)}`, "Bonding Spot Price"]}
+                  formatter={(value: any) => [`$${Number(value).toFixed(4)}`, "Bonding Spot Price"]}
                 />
                 <Line
                   type="monotone"

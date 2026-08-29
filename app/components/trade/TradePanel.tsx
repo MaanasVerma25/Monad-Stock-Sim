@@ -1,12 +1,12 @@
 "use client"
 
-import { useState } from "react"
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract } from "wagmi"
+import { useState, useEffect } from "react"
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useWatchContractEvent } from "wagmi"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { Loader2, ArrowUpRight, ArrowDownRight, Anchor, Fuel, ExternalLink } from "lucide-react"
+import { Loader2, ArrowUpRight, ArrowDownRight, Anchor, Fuel, ExternalLink, TrendingUp, Zap } from "lucide-react"
 import { toast } from "sonner"
 import { STOCK_AMM_ADDRESS, stockAmmAbi, PLAY_MONEY_ADDRESS, playMoneyAbi } from "@/lib/contracts/contracts"
 import { formatUnits } from "@/lib/utils"
@@ -24,31 +24,31 @@ export function TradePanel({ stockId, ticker, name, defaultBasePrice }: TradePan
   const [shareAmount, setShareAmount] = useState("")
   const [isBuy, setIsBuy] = useState(true)
 
-  const { data: stockData } = useReadContract({
+  const { data: stockData, refetch: refetchStockData } = useReadContract({
     address: STOCK_AMM_ADDRESS,
     abi: stockAmmAbi,
     functionName: "getStock",
     args: [BigInt(stockId)],
-    query: { refetchInterval: 2000 },
+    query: { refetchInterval: 1500 },
   })
 
-  const { data: spotPrice } = useReadContract({
+  const { data: spotPrice, refetch: refetchSpotPrice } = useReadContract({
     address: STOCK_AMM_ADDRESS,
     abi: stockAmmAbi,
     functionName: "getPrice",
     args: [BigInt(stockId)],
-    query: { refetchInterval: 2000 },
+    query: { refetchInterval: 1500 },
   })
 
-  const { data: balance } = useReadContract({
+  const { data: balance, refetch: refetchBalance } = useReadContract({
     address: PLAY_MONEY_ADDRESS,
     abi: playMoneyAbi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: { enabled: !!address },
+    query: { enabled: !!address, refetchInterval: 2000 },
   })
 
-  const { data: allowance } = useReadContract({
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: PLAY_MONEY_ADDRESS,
     abi: playMoneyAbi,
     functionName: "allowance",
@@ -59,13 +59,63 @@ export function TradePanel({ stockId, ticker, name, defaultBasePrice }: TradePan
   const { writeContract, data: hash, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess, isError, error } = useWaitForTransactionReceipt({ hash })
 
-  const currentPrice = spotPrice ? Number(spotPrice) / 1e18 : (defaultBasePrice || 100)
+  // Listen to live on-chain Trade events
+  useWatchContractEvent({
+    address: STOCK_AMM_ADDRESS,
+    abi: stockAmmAbi,
+    eventName: "Trade",
+    onLogs: (logs) => {
+      logs.forEach((log) => {
+        if (Number(log.args.stockId) === stockId) {
+          refetchStockData()
+          refetchSpotPrice()
+          refetchBalance()
+        }
+      })
+    },
+  })
+
+  useEffect(() => {
+    if (isSuccess) {
+      refetchStockData()
+      refetchSpotPrice()
+      refetchBalance()
+      refetchAllowance()
+      setCashAmount("")
+      setShareAmount("")
+    }
+  }, [isSuccess, refetchStockData, refetchSpotPrice, refetchBalance, refetchAllowance])
+
+  const cashReserve = stockData?.[2] ? Number(stockData[2]) / 1e18 : (defaultBasePrice || 100) * 200
+  const shareReserve = stockData?.[3] ? Number(stockData[3]) / 1e18 : 200
   const basePrice = stockData?.[4] ? Number(stockData[4]) / 1e18 : (defaultBasePrice || 100)
+  const currentPrice = spotPrice ? Number(spotPrice) / 1e18 : (stockData?.[6] ? Number(stockData[6]) / 1e18 : (defaultBasePrice || 100))
   const displayName = stockData?.[1] || name || ""
 
-  const estimatedOut = isBuy
-    ? Number(cashAmount || 0) / currentPrice
-    : Number(shareAmount || 0) * currentPrice
+  // Exact AMM Bonding Curve Equations
+  let estimatedOut = 0
+  let nextSpotPrice = currentPrice
+  let priceImpactPct = 0
+
+  if (isBuy) {
+    const cashIn = Number(cashAmount) || 0
+    if (cashIn > 0 && cashReserve > 0 && shareReserve > 0) {
+      estimatedOut = (shareReserve * cashIn) / (cashReserve + cashIn)
+      const newCash = cashReserve + cashIn
+      const newShares = shareReserve - estimatedOut
+      nextSpotPrice = newShares > 0 ? newCash / newShares : currentPrice
+      priceImpactPct = currentPrice > 0 ? ((nextSpotPrice - currentPrice) / currentPrice) * 100 : 0
+    }
+  } else {
+    const sharesIn = Number(shareAmount) || 0
+    if (sharesIn > 0 && cashReserve > 0 && shareReserve > 0) {
+      estimatedOut = (cashReserve * sharesIn) / (shareReserve + sharesIn)
+      const newCash = cashReserve - estimatedOut
+      const newShares = shareReserve + sharesIn
+      nextSpotPrice = newShares > 0 ? newCash / newShares : currentPrice
+      priceImpactPct = currentPrice > 0 ? ((nextSpotPrice - currentPrice) / currentPrice) * 100 : 0
+    }
+  }
 
   const requiredWei = isBuy && cashAmount ? BigInt(Math.floor(Number(cashAmount) * 1e18)) : BigInt(0)
   const currentAllowance = typeof allowance === "bigint" ? allowance : BigInt(0)
@@ -142,7 +192,7 @@ export function TradePanel({ stockId, ticker, name, defaultBasePrice }: TradePan
 
   if (isSuccess) {
     toast.success("Order Executed!", {
-      description: `Trade finalized on Monad in ~800ms.`,
+      description: `Trade finalized on Monad in ~800ms. Spot price updated to $${currentPrice.toFixed(4)}.`,
       action: hash ? {
         label: "View Tx",
         onClick: () => window.open(`https://testnet.monadscan.com/tx/${hash}`, "_blank"),
@@ -164,7 +214,7 @@ export function TradePanel({ stockId, ticker, name, defaultBasePrice }: TradePan
           </CardTitle>
           <div className="text-right">
             <span className="text-xs font-mono text-white font-semibold px-2.5 py-1 rounded bg-black border border-white/10 block">
-              Spot: ${currentPrice.toFixed(2)}
+              Spot: ${currentPrice.toFixed(4)}
             </span>
             <span className="text-[11px] text-[#9a9a9a] font-mono flex items-center justify-end gap-1 mt-1">
               <Anchor className="h-3 w-3 text-white" /> Anchor: ${basePrice.toFixed(2)}
@@ -244,22 +294,29 @@ export function TradePanel({ stockId, ticker, name, defaultBasePrice }: TradePan
         {/* Execution Details Summary */}
         <div className="bg-black p-4 rounded-lg border border-white/10 space-y-2 text-xs text-[#9a9a9a]">
           <div className="flex justify-between">
-            <span>Execution Price</span>
-            <span className="font-mono font-semibold text-white">${currentPrice.toFixed(2)}</span>
+            <span>Current Spot Price</span>
+            <span className="font-mono font-semibold text-white">${currentPrice.toFixed(4)}</span>
           </div>
+
           <div className="flex justify-between">
             <span>Estimated Received</span>
             <span className="font-mono font-semibold text-white">
-              {isBuy ? `${estimatedOut.toFixed(4)} shares` : `$${estimatedOut.toFixed(2)}`}
+              {isBuy ? `${estimatedOut.toFixed(4)} shares` : `$${estimatedOut.toFixed(2)} MON`}
             </span>
           </div>
+
+          <div className="flex justify-between items-center pt-1 border-t border-white/10">
+            <span className="font-semibold text-white flex items-center gap-1">
+              <Zap className="h-3 w-3 text-emerald-400" /> New Spot Price after Trade:
+            </span>
+            <span className={`font-mono font-bold text-xs ${isBuy ? "text-emerald-400" : "text-rose-400"}`}>
+              ${nextSpotPrice.toFixed(4)} ({priceImpactPct >= 0 ? "+" : ""}{priceImpactPct.toFixed(2)}%)
+            </span>
+          </div>
+
           <div className="flex justify-between">
             <span className="flex items-center gap-1"><Fuel className="h-3 w-3" />Est. Gas Limit</span>
             <span className="font-mono text-white">~150,000 gas (Monad)</span>
-          </div>
-          <div className="flex justify-between">
-            <span>Finality</span>
-            <span className="font-mono text-white">~800ms (400ms blocks)</span>
           </div>
           {isSuccess && hash && (
             <div className="flex justify-between pt-1 border-t border-white/10">

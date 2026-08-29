@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { X, Loader2, ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown, Activity, Clock, Globe, ExternalLink, Fuel } from "lucide-react"
+import { X, Loader2, ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown, Activity, Clock, Globe, ExternalLink, Fuel, Zap } from "lucide-react"
 import { toast } from "sonner"
 import { STOCK_AMM_ADDRESS, stockAmmAbi, PLAY_MONEY_ADDRESS, playMoneyAbi } from "@/lib/contracts/contracts"
 import { formatUnits } from "@/lib/utils"
@@ -33,9 +33,9 @@ export function TradeModal({
   stockId,
   ticker,
   name,
-  basePrice,
-  currentPrice,
-  percentChange,
+  basePrice: initialBasePrice,
+  currentPrice: initialCurrentPrice,
+  percentChange: initialPercentChange,
   isOpen,
   onClose,
 }: TradeModalProps) {
@@ -47,22 +47,77 @@ export function TradeModal({
   const [chartData, setChartData] = useState<DualChartPoint[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
-  const { data: balance } = useReadContract({
+  // Read Live Stock Data & Spot Price directly from Monad Smart Contract
+  const { data: stockData, refetch: refetchStockData } = useReadContract({
+    address: STOCK_AMM_ADDRESS,
+    abi: stockAmmAbi,
+    functionName: "getStock",
+    args: [BigInt(stockId)],
+    query: { enabled: isOpen, refetchInterval: 1500 },
+  })
+
+  const { data: spotPriceData, refetch: refetchSpotPrice } = useReadContract({
+    address: STOCK_AMM_ADDRESS,
+    abi: stockAmmAbi,
+    functionName: "getPrice",
+    args: [BigInt(stockId)],
+    query: { enabled: isOpen, refetchInterval: 1500 },
+  })
+
+  const { data: balance, refetch: refetchBalance } = useReadContract({
     address: PLAY_MONEY_ADDRESS,
     abi: playMoneyAbi,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
-    query: { enabled: !!address && isOpen },
+    query: { enabled: !!address && isOpen, refetchInterval: 2000 },
   })
 
-  const { data: allowance } = useReadContract({
+  const { data: allowance, refetch: refetchAllowance } = useReadContract({
     address: PLAY_MONEY_ADDRESS,
     abi: playMoneyAbi,
     functionName: "allowance",
     args: address ? [address, STOCK_AMM_ADDRESS] : undefined,
-    query: { enabled: !!address && isOpen },
+    query: { enabled: !!address && isOpen, refetchInterval: 2000 },
   })
 
+  // Parse contract reserves and live prices
+  const cashReserve = stockData?.[2] ? Number(stockData[2]) / 1e18 : (initialBasePrice * 200)
+  const shareReserve = stockData?.[3] ? Number(stockData[3]) / 1e18 : 200
+  const basePrice = stockData?.[4] ? Number(stockData[4]) / 1e18 : initialBasePrice
+  const liveSpotPrice = spotPriceData
+    ? Number(spotPriceData) / 1e18
+    : (stockData?.[6] ? Number(stockData[6]) / 1e18 : initialCurrentPrice)
+
+  const priceDiffFromBase = liveSpotPrice - basePrice
+  const percentChange = basePrice > 0 ? (priceDiffFromBase / basePrice) * 100 : initialPercentChange
+  const isPositive = percentChange >= 0
+
+  // Calculate Exact AMM Constant Product Bonding Curve Outputs
+  let estimatedOut = 0
+  let nextSpotPrice = liveSpotPrice
+  let priceImpactPct = 0
+
+  if (isBuy) {
+    const cashIn = Number(cashAmount) || 0
+    if (cashIn > 0 && cashReserve > 0 && shareReserve > 0) {
+      estimatedOut = (shareReserve * cashIn) / (cashReserve + cashIn)
+      const newCash = cashReserve + cashIn
+      const newShares = shareReserve - estimatedOut
+      nextSpotPrice = newShares > 0 ? newCash / newShares : liveSpotPrice
+      priceImpactPct = liveSpotPrice > 0 ? ((nextSpotPrice - liveSpotPrice) / liveSpotPrice) * 100 : 0
+    }
+  } else {
+    const sharesIn = Number(shareAmount) || 0
+    if (sharesIn > 0 && cashReserve > 0 && shareReserve > 0) {
+      estimatedOut = (cashReserve * sharesIn) / (shareReserve + sharesIn)
+      const newCash = cashReserve - estimatedOut
+      const newShares = shareReserve + sharesIn
+      nextSpotPrice = newShares > 0 ? newCash / newShares : liveSpotPrice
+      priceImpactPct = liveSpotPrice > 0 ? ((nextSpotPrice - liveSpotPrice) / liveSpotPrice) * 100 : 0
+    }
+  }
+
+  // Real-time Event Listener for Monad Trade Events
   useWatchContractEvent({
     address: STOCK_AMM_ADDRESS,
     abi: stockAmmAbi,
@@ -71,16 +126,19 @@ export function TradeModal({
       logs.forEach((log) => {
         if (Number(log.args.stockId) === stockId && log.args.newPrice) {
           const newBondingPrice = Number(log.args.newPrice) / 1e18
-          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+          const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
           setChartData((prev) => {
             const lastReal = prev.length > 0 ? prev[prev.length - 1].realPrice : basePrice
-            return [...prev.slice(-30), { time: timeStr, bondingPrice: newBondingPrice, realPrice: lastReal }]
+            return [...prev.slice(-40), { time: timeStr, bondingPrice: Number(newBondingPrice.toFixed(4)), realPrice: lastReal }]
           })
+          refetchStockData()
+          refetchSpotPrice()
         }
       })
     },
   })
 
+  // Load Real Stock History
   useEffect(() => {
     if (isOpen) {
       setIsLoadingHistory(true)
@@ -89,10 +147,10 @@ export function TradeModal({
         .then((data) => {
           if (data.success && Array.isArray(data.history) && data.history.length > 0) {
             const points: DualChartPoint[] = data.history.map((item: any, i: number) => {
-              const bondingVal = basePrice + (currentPrice - basePrice) * (i / (data.history.length - 1 || 1))
+              const bondingVal = basePrice + (liveSpotPrice - basePrice) * (i / (data.history.length - 1 || 1))
               return {
                 time: item.date || `T-${15 - i}`,
-                bondingPrice: Number(bondingVal.toFixed(2)),
+                bondingPrice: Number(bondingVal.toFixed(4)),
                 realPrice: Number(item.close.toFixed(2)),
               }
             })
@@ -114,23 +172,30 @@ export function TradeModal({
         const factor = i / 11
         return {
           time: `T-${12 - i}m`,
-          bondingPrice: Number((basePrice + (currentPrice - basePrice) * factor).toFixed(2)),
+          bondingPrice: Number((basePrice + (liveSpotPrice - basePrice) * factor).toFixed(4)),
           realPrice: Number((basePrice + Math.sin(i / 2) * 3).toFixed(2)),
         }
       })
       setChartData(defaultPoints)
     }
-  }, [isOpen, ticker, basePrice, currentPrice])
+  }, [isOpen, ticker, basePrice, liveSpotPrice])
 
   const { writeContract, data: hash, isPending } = useWriteContract()
   const { isLoading: isConfirming, isSuccess, isError, error } = useWaitForTransactionReceipt({ hash })
 
-  if (!isOpen) return null
+  // Refetch contract state after successful trade
+  useEffect(() => {
+    if (isSuccess) {
+      refetchStockData()
+      refetchSpotPrice()
+      refetchBalance()
+      refetchAllowance()
+      setCashAmount("")
+      setShareAmount("")
+    }
+  }, [isSuccess, refetchStockData, refetchSpotPrice, refetchBalance, refetchAllowance])
 
-  const isPositive = percentChange >= 0
-  const estimatedOut = isBuy
-    ? (Number(cashAmount) || 0) / (currentPrice || 1)
-    : (Number(shareAmount) || 0) * (currentPrice || 1)
+  if (!isOpen) return null
 
   const handleTrade = async () => {
     if (!address) return
@@ -180,7 +245,7 @@ export function TradeModal({
 
   if (isSuccess) {
     toast.success("Trade finalized on Monad!", {
-      description: `Confirmed in ~800ms. View on MonadScan.`,
+      description: `Confirmed in ~800ms. Spot price updated to $${liveSpotPrice.toFixed(4)}.`,
       action: hash ? {
         label: "View Tx",
         onClick: () => window.open(`https://testnet.monadscan.com/tx/${hash}`, "_blank"),
@@ -230,17 +295,20 @@ export function TradeModal({
 
             <div className="flex items-baseline gap-3">
               <div className="text-4xl font-extrabold tracking-tight font-mono">
-                ${currentPrice.toFixed(2)}
+                ${liveSpotPrice.toFixed(4)}
               </div>
+              <span className="text-xs text-[#9a9a9a] font-mono">
+                Anchor: <strong className="text-white">${basePrice.toFixed(2)}</strong>
+              </span>
             </div>
           </div>
 
-          {/* Graph Legend & Marketstack Badge */}
+          {/* Graph Legend */}
           <div className="flex flex-wrap items-center justify-between gap-2 bg-zinc-950/60 border border-white/10 p-3 rounded-2xl text-xs">
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1.5 font-semibold text-emerald-400">
                 <span className="h-3 w-3 rounded-full bg-emerald-500 inline-block"></span>
-                On-Chain Bonding Curve
+                On-Chain Bonding Curve ($x \cdot y = k$)
               </div>
               <div className="flex items-center gap-1.5 font-semibold text-sky-400">
                 <span className="h-3 w-3 rounded-full bg-sky-500 inline-block border border-dashed border-white"></span>
@@ -248,14 +316,14 @@ export function TradeModal({
               </div>
             </div>
             <div className="flex items-center gap-1 text-[#9a9a9a] font-mono text-[11px]">
-              <Globe className="h-3 w-3 text-white" /> API Connected
+              <Globe className="h-3 w-3 text-white" /> Monad Testnet Live
             </div>
           </div>
 
           {/* Timeframe Bar */}
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-[#9a9a9a] flex items-center gap-1.5">
-              <Activity className="h-3.5 w-3.5 text-white" /> Dual-Line Comparison Graph
+              <Activity className="h-3.5 w-3.5 text-white" /> Live Spot Curve & Real Anchor
             </span>
             <div className="flex gap-1 bg-black p-1 rounded-xl text-xs font-medium border border-white/10">
               {["1D", "1W", "1M", "ALL"].map((tf) => (
@@ -278,7 +346,7 @@ export function TradeModal({
           <div className="h-64 sm:h-72 w-full pt-2">
             {isLoadingHistory ? (
               <div className="h-full flex items-center justify-center text-sm text-[#9a9a9a] gap-2 font-mono">
-                <Loader2 className="h-5 w-5 animate-spin text-white" /> Loading real-world market history...
+                <Loader2 className="h-5 w-5 animate-spin text-white" /> Loading bonding curve history...
               </div>
             ) : (
               <ResponsiveContainer width="100%" height="100%">
@@ -295,7 +363,7 @@ export function TradeModal({
                       color: "#ffffff"
                     }}
                     formatter={(val: any, name: any) => [
-                      `$${Number(val).toFixed(2)}`,
+                      `$${Number(val).toFixed(4)}`,
                       name === "bondingPrice" ? "On-Chain Bonding Curve" : "Real Market Price"
                     ]}
                   />
@@ -335,8 +403,8 @@ export function TradeModal({
           <div className="space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="font-bold text-lg font-serif">Order Execution</h3>
-              <Badge variant="outline" className="gap-1 text-xs border-white/20 text-[#9a9a9a]">
-                <Clock className="h-3 w-3 text-white" /> Instant Finality
+              <Badge variant="outline" className="gap-1 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-950/40">
+                <Zap className="h-3 w-3 text-emerald-400" /> Bonding Curve AMM
               </Badge>
             </div>
 
@@ -384,29 +452,43 @@ export function TradeModal({
               />
             </div>
 
-            {/* Estimates & Balance */}
+            {/* Estimates & Bonding Curve Price Impact */}
             <div className="text-xs text-[#9a9a9a] space-y-2 bg-black/60 p-4 rounded-2xl border border-white/10">
-              <div className="flex justify-between">
+              <div className="flex justify-between items-center">
                 <span>Estimated Received:</span>
                 <span className="font-mono font-bold text-white text-sm">
-                  {isBuy ? `${estimatedOut.toFixed(4)} shares` : `$${estimatedOut.toFixed(2)}`}
+                  {isBuy ? `${estimatedOut.toFixed(4)} shares` : `$${estimatedOut.toFixed(2)} MON`}
                 </span>
               </div>
-              <div className="flex justify-between">
+
+              <div className="flex justify-between items-center">
+                <span>Current Spot Price:</span>
+                <span className="font-mono font-semibold text-white">
+                  ${liveSpotPrice.toFixed(4)}
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center pt-1 border-t border-white/10">
+                <span className="font-semibold text-white flex items-center gap-1">
+                  <TrendingUp className="h-3 w-3 text-emerald-400" /> New Spot Price after Trade:
+                </span>
+                <span className={`font-mono font-bold text-sm ${isBuy ? "text-emerald-400" : "text-rose-400"}`}>
+                  ${nextSpotPrice.toFixed(4)} ({priceImpactPct >= 0 ? "+" : ""}{priceImpactPct.toFixed(2)}%)
+                </span>
+              </div>
+
+              <div className="flex justify-between items-center">
                 <span>Your MON Balance:</span>
                 <span className="font-mono text-white font-semibold">
                   {balance ? `${formatUnits(balance)} MON` : "Loading..."}
                 </span>
               </div>
-              <div className="flex justify-between">
-                <span className="flex items-center gap-1"><Fuel className="h-3 w-3" />Est. Gas Cost:</span>
+
+              <div className="flex justify-between items-center">
+                <span className="flex items-center gap-1"><Fuel className="h-3 w-3" />Est. Gas Limit:</span>
                 <span className="font-mono text-white font-semibold">
-                  {isBuy ? "~150,000 gas" : "~150,000 gas"} (charged on limit)
+                  ~150,000 gas (Monad)
                 </span>
-              </div>
-              <div className="flex justify-between">
-                <span>Finality:</span>
-                <span className="font-mono text-white font-semibold">~800ms (400ms blocks)</span>
               </div>
               {isSuccess && hash && (
                 <div className="flex justify-between pt-1 border-t border-white/10">
