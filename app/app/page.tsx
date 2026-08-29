@@ -1,11 +1,13 @@
 "use client"
 
 import Link from "next/link"
+import { useState } from "react"
 import { Instrument_Serif } from "next/font/google"
 import { Navbar } from "@/components/Navbar"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Wallet, Zap, TrendingUp, Anchor, Activity, ArrowRight, ShieldCheck } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Wallet, Zap, TrendingUp, Anchor, Activity, ArrowRight, ShieldCheck, ExternalLink, Mail, Sparkles } from "lucide-react"
 
 const instrumentSerif = Instrument_Serif({
   weight: "400",
@@ -14,6 +16,13 @@ const instrumentSerif = Instrument_Serif({
 })
 
 export default function HomePage() {
+  const [emailInput, setEmailInput] = useState("")
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    window.open("https://forms.gle/zoDkdDrfWpXJcnaM9", "_blank", "noopener,noreferrer")
+  }
+
   return (
     <div className="min-h-screen bg-[#000000] text-[#F8FAFC] relative overflow-hidden">
       {/* Full-screen Background Video */}
@@ -135,7 +144,7 @@ export default function HomePage() {
           </section>
 
           {/* CTA Banner */}
-          <section className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center max-w-4xl mx-auto">
+          <section className="bg-black/60 backdrop-blur-md border border-white/10 rounded-2xl p-12 text-center max-w-4xl mx-auto mb-16">
             <h2 className="font-serif text-3xl md:text-4xl font-bold text-[#F8FAFC] mb-4">
               Ready to test your trading strategy?
             </h2>
@@ -150,6 +159,62 @@ export default function HomePage() {
                 Start Trading Now <ArrowRight className="h-5 w-5 text-black" />
               </Button>
             </Link>
+          </section>
+
+          {/* Sign Up Box / Community Access Form */}
+          <section className="max-w-4xl mx-auto">
+            <div className="relative overflow-hidden bg-gradient-to-b from-zinc-950/90 via-black/80 to-zinc-950/90 backdrop-blur-xl border border-white/15 rounded-3xl p-8 md:p-12 shadow-2xl">
+              {/* Decorative Glow Elements */}
+              <div className="absolute -top-24 -right-24 w-60 h-60 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+              <div className="absolute -bottom-24 -left-24 w-60 h-60 bg-sky-500/10 rounded-full blur-3xl pointer-events-none" />
+
+              <div className="relative z-10 text-center max-w-2xl mx-auto space-y-6">
+                <div className="p-3 bg-white/5 border border-white/10 w-fit rounded-2xl mx-auto flex items-center gap-2 text-emerald-400 text-xs font-mono font-semibold">
+                  <Sparkles className="h-4 w-4 text-emerald-400" />
+                  <span>Early Access & Feedback</span>
+                </div>
+
+                <h2 className="font-serif text-3xl md:text-4xl font-bold text-white tracking-tight">
+                  Sign Up for PulseStock Early Access
+                </h2>
+
+                <p className="text-[#9a9a9a] text-sm md:text-base leading-relaxed">
+                  Join our exclusive tester group, get updates on new equity listings, and share your feedback directly with the team.
+                </p>
+
+                <form onSubmit={handleFormSubmit} className="flex flex-col sm:flex-row gap-3 max-w-lg mx-auto pt-2">
+                  <div className="relative flex-1">
+                    <Mail className="absolute left-3.5 top-3.5 h-5 w-5 text-[#9a9a9a]" />
+                    <Input
+                      type="email"
+                      value={emailInput}
+                      onChange={(e) => setEmailInput(e.target.value)}
+                      placeholder="Enter your email address"
+                      className="pl-11 bg-black/80 border-white/20 text-white h-12 rounded-xl text-sm focus-visible:ring-white font-mono"
+                    />
+                  </div>
+                  <Button
+                    type="submit"
+                    size="lg"
+                    className="gap-2 bg-gradient-to-r from-emerald-600 to-emerald-500 hover:opacity-90 text-white font-bold h-12 px-6 rounded-xl transition-all shadow-md shrink-0 text-sm font-mono"
+                  >
+                    Sign Up <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </form>
+
+                <div className="pt-2 text-xs text-[#9a9a9a]">
+                  Or click directly to open the form:{" "}
+                  <a
+                    href="https://forms.gle/zoDkdDrfWpXJcnaM9"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-400 hover:underline font-mono inline-flex items-center gap-1 font-semibold"
+                  >
+                    https://forms.gle/zoDkdDrfWpXJcnaM9 <ExternalLink className="h-3 w-3" />
+                  </a>
+                </div>
+              </div>
+            </div>
           </section>
         </main>
       </div>

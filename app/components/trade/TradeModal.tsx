@@ -70,8 +70,8 @@ export function TradeModal({
   })
 
   // Parse contract reserves and live prices
-  const cashReserve = stockData?.[2] ? Number(stockData[2]) / 1e18 : (initialBasePrice * 200)
-  const shareReserve = stockData?.[3] ? Number(stockData[3]) / 1e18 : 200
+  const cashReserve = stockData?.[2] ? Number(stockData[2]) / 1e18 : (initialBasePrice * 5)
+  const shareReserve = stockData?.[3] ? Number(stockData[3]) / 1e18 : 5
   const basePrice = stockData?.[4] ? Number(stockData[4]) / 1e18 : initialBasePrice
   const liveSpotPrice = spotPriceData
     ? Number(spotPriceData) / 1e18

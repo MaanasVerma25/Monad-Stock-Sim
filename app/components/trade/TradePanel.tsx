@@ -74,8 +74,8 @@ export function TradePanel({ stockId, ticker, name, defaultBasePrice }: TradePan
     }
   }, [isSuccess, refetchStockData, refetchSpotPrice, refetchMonBalance])
 
-  const cashReserve = stockData?.[2] ? Number(stockData[2]) / 1e18 : (defaultBasePrice || 100) * 200
-  const shareReserve = stockData?.[3] ? Number(stockData[3]) / 1e18 : 200
+  const cashReserve = stockData?.[2] ? Number(stockData[2]) / 1e18 : (defaultBasePrice || 100) * 5
+  const shareReserve = stockData?.[3] ? Number(stockData[3]) / 1e18 : 5
   const basePrice = stockData?.[4] ? Number(stockData[4]) / 1e18 : (defaultBasePrice || 100)
   const currentPrice = spotPrice ? Number(spotPrice) / 1e18 : (stockData?.[6] ? Number(stockData[6]) / 1e18 : (defaultBasePrice || 100))
   const displayName = stockData?.[1] || name || ""
