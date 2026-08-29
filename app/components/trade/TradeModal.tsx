@@ -1,16 +1,15 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useWatchContractEvent } from "wagmi"
+import { useAccount, useBalance, useWriteContract, useWaitForTransactionReceipt, useReadContract, useWatchContractEvent } from "wagmi"
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, ReferenceLine } from "recharts"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
-import { X, Loader2, ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown, Activity, Clock, Globe, ExternalLink, Fuel, Zap } from "lucide-react"
+import { X, Loader2, ArrowUpRight, ArrowDownRight, TrendingUp, TrendingDown, Activity, Clock, Globe, ExternalLink, Fuel, Zap, Wallet } from "lucide-react"
 import { toast } from "sonner"
-import { STOCK_AMM_ADDRESS, stockAmmAbi, PLAY_MONEY_ADDRESS, playMoneyAbi } from "@/lib/contracts/contracts"
-import { formatUnits } from "@/lib/utils"
+import { STOCK_AMM_ADDRESS, stockAmmAbi } from "@/lib/contracts/contracts"
 
 interface TradeModalProps {
   stockId: number
@@ -47,6 +46,12 @@ export function TradeModal({
   const [chartData, setChartData] = useState<DualChartPoint[]>([])
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
 
+  // Fetch user's Native MON balance from MetaMask wallet
+  const { data: monBalance, refetch: refetchMonBalance } = useBalance({
+    address,
+    query: { enabled: !!address && isOpen, refetchInterval: 2000 },
+  })
+
   // Read Live Stock Data & Spot Price directly from Monad Smart Contract
   const { data: stockData, refetch: refetchStockData } = useReadContract({
     address: STOCK_AMM_ADDRESS,
@@ -62,22 +67,6 @@ export function TradeModal({
     functionName: "getPrice",
     args: [BigInt(stockId)],
     query: { enabled: isOpen, refetchInterval: 1500 },
-  })
-
-  const { data: balance, refetch: refetchBalance } = useReadContract({
-    address: PLAY_MONEY_ADDRESS,
-    abi: playMoneyAbi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: { enabled: !!address && isOpen, refetchInterval: 2000 },
-  })
-
-  const { data: allowance, refetch: refetchAllowance } = useReadContract({
-    address: PLAY_MONEY_ADDRESS,
-    abi: playMoneyAbi,
-    functionName: "allowance",
-    args: address ? [address, STOCK_AMM_ADDRESS] : undefined,
-    query: { enabled: !!address && isOpen, refetchInterval: 2000 },
   })
 
   // Parse contract reserves and live prices
@@ -133,6 +122,7 @@ export function TradeModal({
           })
           refetchStockData()
           refetchSpotPrice()
+          refetchMonBalance()
         }
       })
     },
@@ -188,12 +178,11 @@ export function TradeModal({
     if (isSuccess) {
       refetchStockData()
       refetchSpotPrice()
-      refetchBalance()
-      refetchAllowance()
+      refetchMonBalance()
       setCashAmount("")
       setShareAmount("")
     }
-  }, [isSuccess, refetchStockData, refetchSpotPrice, refetchBalance, refetchAllowance])
+  }, [isSuccess, refetchStockData, refetchSpotPrice, refetchMonBalance])
 
   if (!isOpen) return null
 
@@ -205,24 +194,14 @@ export function TradeModal({
         const amountInWei = BigInt(Math.floor(Number(cashAmount) * 1e18))
         if (amountInWei <= 0n) return
 
-        if (!allowance || allowance < amountInWei) {
-          toast.info("Approving MON transfer...")
-          writeContract({
-            address: PLAY_MONEY_ADDRESS,
-            abi: playMoneyAbi,
-            functionName: "approve",
-            args: [STOCK_AMM_ADDRESS, BigInt("0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff")],
-            gas: 60000n,
-          })
-          return
-        }
-
+        // Execute Buy directly sending Native MON value to StockAMM contract
         writeContract({
           address: STOCK_AMM_ADDRESS,
           abi: stockAmmAbi,
           functionName: "buy",
-          args: [BigInt(stockId), amountInWei],
-          gas: 150000n,
+          args: [BigInt(stockId)],
+          value: amountInWei,
+          gas: 150000n, // Monad charges gas on gas_limit
         })
       } else {
         const amountInWei = BigInt(Math.floor(Number(shareAmount) * 1e18))
@@ -233,7 +212,7 @@ export function TradeModal({
           abi: stockAmmAbi,
           functionName: "sell",
           args: [BigInt(stockId), amountInWei],
-          gas: 150000n,
+          gas: 150000n, // Monad charges gas on gas_limit
         })
       }
     } catch (e) {
@@ -244,8 +223,8 @@ export function TradeModal({
   const isTradePending = isPending || isConfirming
 
   if (isSuccess) {
-    toast.success("Trade finalized on Monad!", {
-      description: `Confirmed in ~800ms. Spot price updated to $${liveSpotPrice.toFixed(4)}.`,
+    toast.success("Native MON Order Finalized!", {
+      description: `Trade executed on Monad in ~800ms. Spot price updated to $${liveSpotPrice.toFixed(4)}.`,
       action: hash ? {
         label: "View Tx",
         onClick: () => window.open(`https://testnet.monadscan.com/tx/${hash}`, "_blank"),
@@ -398,13 +377,16 @@ export function TradeModal({
           </div>
         </div>
 
-        {/* Right Side: Order Execution Panel */}
+        {/* Right Side: Native MON Order Execution Panel */}
         <div className="lg:col-span-5 p-6 bg-zinc-950/80 flex flex-col justify-between space-y-5">
           <div className="space-y-4">
             <div className="flex items-center justify-between">
-              <h3 className="font-bold text-lg font-serif">Order Execution</h3>
+              <h3 className="font-bold text-lg font-serif flex items-center gap-2">
+                <Wallet className="h-5 w-5 text-emerald-400" />
+                Native MON Execution
+              </h3>
               <Badge variant="outline" className="gap-1 text-xs border-emerald-500/30 text-emerald-400 bg-emerald-950/40">
-                <Zap className="h-3 w-3 text-emerald-400" /> Bonding Curve AMM
+                <Zap className="h-3 w-3 text-emerald-400" /> Direct MetaMask MON
               </Badge>
             </div>
 
@@ -439,32 +421,32 @@ export function TradeModal({
             {/* Amount Input */}
             <div className="space-y-2">
               <label className="text-xs font-semibold text-[#9a9a9a] uppercase tracking-wider">
-                {isBuy ? "MON Amount to Spend" : "Shares to Sell"}
+                {isBuy ? "Native MON Amount to Spend" : "Shares to Sell"}
               </label>
               <Input
                 type="number"
                 step="0.0001"
                 value={isBuy ? cashAmount : shareAmount}
                 onChange={(e) => isBuy ? setCashAmount(e.target.value) : setShareAmount(e.target.value)}
-                placeholder={isBuy ? "e.g. 50 MON" : "e.g. 2.5 shares"}
+                placeholder={isBuy ? "e.g. 1.5 MON" : "e.g. 2.5 shares"}
                 disabled={isTradePending || !isConnected}
                 className="bg-[#000000] border-white/20 text-white h-12 font-mono text-lg font-bold focus-visible:ring-white"
               />
             </div>
 
-            {/* Estimates & Bonding Curve Price Impact */}
+            {/* Estimates & Native MON Gas Rules */}
             <div className="text-xs text-[#9a9a9a] space-y-2 bg-black/60 p-4 rounded-2xl border border-white/10">
               <div className="flex justify-between items-center">
-                <span>Estimated Received:</span>
+                <span>MetaMask MON Balance:</span>
                 <span className="font-mono font-bold text-white text-sm">
-                  {isBuy ? `${estimatedOut.toFixed(4)} shares` : `$${estimatedOut.toFixed(2)} MON`}
+                  {monBalance ? `${Number(monBalance.formatted).toFixed(4)} MON` : "Loading..."}
                 </span>
               </div>
 
               <div className="flex justify-between items-center">
-                <span>Current Spot Price:</span>
-                <span className="font-mono font-semibold text-white">
-                  ${liveSpotPrice.toFixed(4)}
+                <span>Estimated Received:</span>
+                <span className="font-mono font-bold text-white text-sm">
+                  {isBuy ? `${estimatedOut.toFixed(4)} shares` : `${estimatedOut.toFixed(4)} MON`}
                 </span>
               </div>
 
@@ -477,19 +459,16 @@ export function TradeModal({
                 </span>
               </div>
 
-              <div className="flex justify-between items-center">
-                <span>Your MON Balance:</span>
-                <span className="font-mono text-white font-semibold">
-                  {balance ? `${formatUnits(balance)} MON` : "Loading..."}
-                </span>
+              {/* Monad Gas Rule Note */}
+              <div className="pt-2 border-t border-white/10 text-[11px] text-[#9a9a9a] leading-relaxed">
+                <p className="flex items-start gap-1">
+                  <Fuel className="h-3.5 w-3.5 text-white shrink-0 mt-0.5" />
+                  <span>
+                    Native MON balance for gas fees. Monad charges gas on <strong className="text-white font-mono">gas_limit (150,000)</strong>, not gas used.
+                  </span>
+                </p>
               </div>
 
-              <div className="flex justify-between items-center">
-                <span className="flex items-center gap-1"><Fuel className="h-3 w-3" />Est. Gas Limit:</span>
-                <span className="font-mono text-white font-semibold">
-                  ~150,000 gas (Monad)
-                </span>
-              </div>
               {isSuccess && hash && (
                 <div className="flex justify-between pt-1 border-t border-white/10">
                   <span>Transaction:</span>
@@ -533,7 +512,7 @@ export function TradeModal({
 
             {!isConnected && (
               <p className="text-xs text-center text-[#9a9a9a]">
-                Connect wallet to execute orders
+                Connect MetaMask wallet to execute Native MON orders
               </p>
             )}
           </div>

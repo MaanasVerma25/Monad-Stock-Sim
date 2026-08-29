@@ -4,25 +4,15 @@ const { createWalletClient, createPublicClient, http, parseEther } = require('..
 const { privateKeyToAccount } = require('../app/node_modules/viem/accounts');
 const { defineChain } = require('../app/node_modules/viem');
 
-// Load environment variables if available
-let privateKey = process.env.PRIVATE_KEY;
-if (!privateKey) {
-  try {
-    const envFile = fs.readFileSync(path.join(__dirname, '..', 'price-setter', '.env'), 'utf8');
-    const match = envFile.match(/PRIVATE_KEY=(0x[a-fA-F0-9]{64}|[a-fA-F0-9]{64})/);
-    if (match) {
-      privateKey = match[1];
-    }
-  } catch (e) {}
-}
+const priceSetterEnv = fs.readFileSync(path.join(__dirname, '..', 'price-setter', '.env'), 'utf8');
+const privateKeyMatch = priceSetterEnv.match(/PRIVATE_KEY=(0x[a-fA-F0-9]{64}|[a-fA-F0-9]{64})/);
 
-if (!privateKey || privateKey === '0x...' || privateKey.length < 64) {
-  console.error('\n❌ ERROR: Private Key not provided or invalid!');
-  console.error('Please set your deployer private key in price-setter/.env or run with:');
-  console.error('  $env:PRIVATE_KEY="0xYourPrivateKey" ; node contracts/deploy-monad.js\n');
+if (!privateKeyMatch) {
+  console.error('\n❌ ERROR: Private Key missing in price-setter/.env\n');
   process.exit(1);
 }
 
+let privateKey = privateKeyMatch[1];
 if (!privateKey.startsWith('0x')) {
   privateKey = '0x' + privateKey;
 }
@@ -38,21 +28,13 @@ const monadTestnet = defineChain({
 });
 
 async function main() {
-  console.log('🚀 Starting deployment on Monad Testnet (Chain ID 10143)...');
+  console.log('🚀 Deploying Native MON StockAMM to Monad Testnet...');
 
   const account = privateKeyToAccount(privateKey);
   console.log(`📍 Deployer account: ${account.address}`);
 
-  const publicClient = createPublicClient({
-    chain: monadTestnet,
-    transport: http()
-  });
-
-  const walletClient = createWalletClient({
-    account,
-    chain: monadTestnet,
-    transport: http()
-  });
+  const publicClient = createPublicClient({ chain: monadTestnet, transport: http() });
+  const walletClient = createWalletClient({ account, chain: monadTestnet, transport: http() });
 
   const balance = await publicClient.getBalance({ address: account.address });
   console.log(`💰 Deployer MON Balance: ${(Number(balance) / 1e18).toFixed(4)} MON`);
@@ -64,35 +46,22 @@ async function main() {
 
   const compiled = JSON.parse(fs.readFileSync(path.join(__dirname, 'compiled.json'), 'utf8'));
 
-  // 1. Deploy PlayMoney
-  console.log('\n1️⃣ Deploying PlayMoney contract...');
-  const playMoneyHash = await walletClient.deployContract({
-    abi: compiled.PlayMoney.abi,
-    bytecode: '0x' + compiled.PlayMoney.bytecode,
-    args: []
-  });
-  console.log(`   Transaction submitted! Hash: ${playMoneyHash}`);
-  console.log('   Waiting for transaction receipt...');
-  const playMoneyReceipt = await publicClient.waitForTransactionReceipt({ hash: playMoneyHash });
-  const playMoneyAddress = playMoneyReceipt.contractAddress;
-  console.log(`   ✅ PlayMoney deployed at: ${playMoneyAddress}`);
-
-  // 2. Deploy StockAMM
-  console.log('\n2️⃣ Deploying StockAMM contract...');
-  const shareLiquidity = parseEther('2000'); // 2,000 shares base liquidity
+  // 1. Deploy StockAMM with 200 share liquidity
+  console.log('\n1️⃣ Deploying Native MON StockAMM contract...');
+  const shareLiquidity = parseEther('200'); // 200 shares pool liquidity for sensitive price shifts
   const stockAmmHash = await walletClient.deployContract({
     abi: compiled.StockAMM.abi,
     bytecode: '0x' + compiled.StockAMM.bytecode,
-    args: [playMoneyAddress, shareLiquidity]
+    args: [shareLiquidity]
   });
   console.log(`   Transaction submitted! Hash: ${stockAmmHash}`);
   console.log('   Waiting for transaction receipt...');
   const stockAmmReceipt = await publicClient.waitForTransactionReceipt({ hash: stockAmmHash });
   const stockAmmAddress = stockAmmReceipt.contractAddress;
-  console.log(`   ✅ StockAMM deployed at: ${stockAmmAddress}`);
+  console.log(`   ✅ Native MON StockAMM deployed at: ${stockAmmAddress}`);
 
-  // 3. Add initial stocks
-  console.log('\n3️⃣ Initializing 8 stock AMM pools (AAPL, TSLA, NVDA, GOOGL, MSFT, AMZN, META, COIN)...');
+  // 2. Add initial stocks
+  console.log('\n2️⃣ Initializing 8 stock AMM pools (AAPL, TSLA, NVDA, GOOGL, MSFT, AMZN, META, COIN)...');
   const tickers = ["AAPL", "TSLA", "NVDA", "GOOGL", "MSFT", "AMZN", "META", "COIN"];
   const names = [
     "Apple Inc.", "Tesla Inc.", "NVIDIA Corporation", "Alphabet Inc.",
@@ -113,41 +82,30 @@ async function main() {
   await publicClient.waitForTransactionReceipt({ hash: addBatchHash });
   console.log('   ✅ Stock pools created!');
 
-  // 4. Mint SUSD liquidity into StockAMM
-  console.log('\n4️⃣ Minting initial PlayMoney cash liquidity into StockAMM contract...');
-  let totalCashNeeded = 0n;
-  for (const price of basePrices) {
-    totalCashNeeded += (price * shareLiquidity) / parseEther('1');
-  }
-  const mintLiquidityHash = await walletClient.writeContract({
-    address: playMoneyAddress,
-    abi: compiled.PlayMoney.abi,
-    functionName: 'mint',
-    args: [stockAmmAddress, totalCashNeeded * 2n]
+  // 3. Send 1 MON native liquidity to StockAMM contract for sell redemptions
+  console.log('\n3️⃣ Seeding native MON liquidity into StockAMM contract...');
+  const depositTx = await walletClient.sendTransaction({
+    to: stockAmmAddress,
+    value: parseEther('1.0')
   });
-  console.log(`   Transaction submitted! Hash: ${mintLiquidityHash}`);
-  await publicClient.waitForTransactionReceipt({ hash: mintLiquidityHash });
-  console.log('   ✅ Initial liquidity minted!');
+  console.log(`   Native MON deposit tx: ${depositTx}`);
+  await publicClient.waitForTransactionReceipt({ hash: depositTx });
+  console.log('   ✅ Native MON liquidity deposited!');
 
-  // 5. Write to app/.env and price-setter/.env
-  console.log('\n5️⃣ Updating environment files with newly deployed addresses...');
-  
+  // 4. Update app/.env and price-setter/.env
+  console.log('\n4️⃣ Updating environment files with new StockAMM address...');
   const appEnvPath = path.join(__dirname, '..', 'app', '.env');
   let appEnvContent = fs.readFileSync(appEnvPath, 'utf8');
-  appEnvContent = appEnvContent.replace(/NEXT_PUBLIC_PLAY_MONEY_ADDRESS=.*/, `NEXT_PUBLIC_PLAY_MONEY_ADDRESS=${playMoneyAddress}`);
   appEnvContent = appEnvContent.replace(/NEXT_PUBLIC_STOCK_AMM_ADDRESS=.*/, `NEXT_PUBLIC_STOCK_AMM_ADDRESS=${stockAmmAddress}`);
   fs.writeFileSync(appEnvPath, appEnvContent);
-  console.log('   ✅ Updated app/.env');
 
   const priceSetterEnvPath = path.join(__dirname, '..', 'price-setter', '.env');
   let priceSetterEnvContent = fs.readFileSync(priceSetterEnvPath, 'utf8');
   priceSetterEnvContent = priceSetterEnvContent.replace(/STOCK_AMM_ADDRESS=.*/, `STOCK_AMM_ADDRESS=${stockAmmAddress}`);
   fs.writeFileSync(priceSetterEnvPath, priceSetterEnvContent);
-  console.log('   ✅ Updated price-setter/.env');
 
-  console.log('\n🎉 ALL DEPLOYMENT STEPS COMPLETED SUCCESSFULLY!');
-  console.log(`   PlayMoney: ${playMoneyAddress}`);
-  console.log(`   StockAMM:  ${stockAmmAddress}\n`);
+  console.log('\n🎉 NATIVE MON AMM DEPLOYED SUCCESSFULLY!');
+  console.log(`   StockAMM: ${stockAmmAddress}\n`);
 }
 
 main().catch(err => {

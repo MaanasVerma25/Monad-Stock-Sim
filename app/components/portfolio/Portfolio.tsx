@@ -1,21 +1,19 @@
 "use client"
 
-import { useAccount, useReadContract } from "wagmi"
+import { useAccount, useReadContract, useBalance } from "wagmi"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from "@/components/ui/table"
-import { formatUnits, formatPrice } from "@/lib/utils"
-import { PLAY_MONEY_ADDRESS, playMoneyAbi, STOCK_AMM_ADDRESS, stockAmmAbi, STOCKS } from "@/lib/contracts/contracts"
-import { Sparkles } from "lucide-react"
+import { formatPrice } from "@/lib/utils"
+import { STOCK_AMM_ADDRESS, stockAmmAbi, STOCKS } from "@/lib/contracts/contracts"
+import { Sparkles, Wallet } from "lucide-react"
 
 export function Portfolio() {
   const { address, isConnected } = useAccount()
 
-  const { data: cashBalance } = useReadContract({
-    address: PLAY_MONEY_ADDRESS,
-    abi: playMoneyAbi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: { enabled: !!address, refetchInterval: 5000 },
+  // Read native MON balance from MetaMask wallet
+  const { data: monBalance } = useBalance({
+    address,
+    query: { enabled: !!address, refetchInterval: 3000 },
   })
 
   const holdings = STOCKS.map((stock) => {
@@ -55,7 +53,7 @@ export function Portfolio() {
   })
 
   const totalPositionsValue = holdings.reduce((acc, h) => acc + h.value, 0)
-  const cashVal = typeof cashBalance === "bigint" ? Number(cashBalance) / 1e18 : 0
+  const cashVal = monBalance ? Number(monBalance.formatted) : 0
   const totalValue = cashVal + totalPositionsValue
 
   if (!isConnected) {
@@ -71,7 +69,10 @@ export function Portfolio() {
   return (
     <Card className="bg-black/40 backdrop-blur-sm border border-white/10 p-6 rounded-2xl shadow-2xl relative overflow-hidden">
       <CardHeader className="p-0 mb-6">
-        <CardTitle className="font-serif text-2xl font-bold text-slate-100">Asset Holdings & Valuation</CardTitle>
+        <CardTitle className="font-serif text-2xl font-bold text-slate-100 flex items-center gap-2">
+          <Wallet className="h-6 w-6 text-emerald-400" />
+          Native MON Portfolio & Asset Holdings
+        </CardTitle>
       </CardHeader>
       <CardContent className="p-0 space-y-6">
         <div className="grid sm:grid-cols-2 gap-4 bg-black/30 backdrop-blur-sm p-6 rounded-xl border border-white/10 shadow-lg">
@@ -82,9 +83,9 @@ export function Portfolio() {
             </div>
           </div>
           <div>
-            <div className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">Liquid Cash Balance</div>
+            <div className="text-xs font-mono text-slate-400 uppercase tracking-wider mb-1">MetaMask Native MON Balance</div>
             <div className="font-mono text-2xl font-bold text-emerald-400 drop-shadow-[0_0_10px_rgba(52,211,153,0.6)]">
-              {typeof cashBalance === "bigint" ? `${formatUnits(cashBalance)} MON` : "0.0000 MON"}
+              {monBalance ? `${Number(monBalance.formatted).toFixed(4)} MON` : "0.0000 MON"}
             </div>
           </div>
         </div>

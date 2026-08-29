@@ -1,11 +1,10 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAccount, useConnect, useDisconnect, useReadContract, useBalance } from "wagmi"
+import { useAccount, useConnect, useDisconnect, useBalance } from "wagmi"
 import { Button } from "@/components/ui/button"
-import { Wallet, LogOut, AlertTriangle } from "lucide-react"
-import { formatUnits, shortenAddress } from "@/lib/utils"
-import { PLAY_MONEY_ADDRESS, playMoneyAbi } from "@/lib/contracts/contracts"
+import { Wallet, LogOut, AlertTriangle, Fuel } from "lucide-react"
+import { shortenAddress } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
 export function ConnectButton({ className }: { className?: string }) {
@@ -18,18 +17,10 @@ export function ConnectButton({ className }: { className?: string }) {
     setMounted(true)
   }, [])
 
-  const { data: balance } = useReadContract({
-    address: PLAY_MONEY_ADDRESS,
-    abi: playMoneyAbi,
-    functionName: "balanceOf",
-    args: address ? [address] : undefined,
-    query: { enabled: !!address && mounted },
-  })
-
-  // Native MON balance for reserve balance warnings (Monad 10 MON floor)
+  // Native MON balance from MetaMask wallet
   const { data: nativeBalance } = useBalance({
     address: address,
-    query: { enabled: !!address && mounted, refetchInterval: 5000 },
+    query: { enabled: !!address && mounted, refetchInterval: 3000 },
   })
 
   const nativeMonBalance = nativeBalance ? Number(nativeBalance.formatted) : 0
@@ -75,34 +66,29 @@ export function ConnectButton({ className }: { className?: string }) {
     <div className={`flex items-center gap-3 ${className || ""}`}>
       <div className="flex items-center gap-3 px-4 py-2 bg-black/80 border border-white/15 backdrop-blur-sm rounded-lg">
         <div className="flex items-center gap-2">
-          <Wallet className="h-4 w-4 text-white" />
+          <Wallet className="h-4 w-4 text-emerald-400" />
           <span className="font-mono text-sm font-semibold text-white">{address ? shortenAddress(address) : ""}</span>
         </div>
-        {typeof balance === "bigint" && (
-          <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-white/10 text-white border border-white/20">
-            {formatUnits(balance)} MON
-          </span>
-        )}
         {nativeBalance && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span className={`text-xs font-mono font-medium px-2 py-0.5 rounded border ${
+              <span className={`text-xs font-mono font-bold px-2.5 py-1 rounded border flex items-center gap-1.5 ${
                 isBelowReserve
                   ? "bg-amber-950/40 text-amber-400 border-amber-500/30"
-                  : "bg-white/5 text-[#9a9a9a] border-white/10"
+                  : "bg-emerald-950/40 text-emerald-400 border-emerald-500/30"
               }`}>
-                {isBelowReserve && <AlertTriangle className="h-3 w-3 inline mr-1" />}
-                {Number(nativeBalance.formatted).toFixed(2)} MON (native)
+                {isBelowReserve ? <AlertTriangle className="h-3.5 w-3.5 inline" /> : <Fuel className="h-3.5 w-3.5 inline" />}
+                {Number(nativeBalance.formatted).toFixed(4)} MON
               </span>
             </TooltipTrigger>
-            <TooltipContent className="bg-black border border-white/20 text-white max-w-xs">
+            <TooltipContent className="bg-black border border-white/20 text-white max-w-xs p-3">
               {isBelowReserve ? (
                 <p className="text-xs">
-                  ⚠️ Below 10 MON reserve. Monad enforces a 10 MON floor per EOA — low-balance accounts can only send 1 tx every ~1.2s.
+                  ⚠️ Below 10 MON reserve floor. Monad enforces a 10 MON floor per EOA — low-balance accounts are throttled to 1 tx per ~1.2s.
                 </p>
               ) : (
                 <p className="text-xs">
-                  Native MON balance for gas fees. Monad charges gas on gas_limit (not gas used).
+                  Native MON balance for gas fees & trading. Monad charges gas on gas_limit (not gas used).
                 </p>
               )}
             </TooltipContent>
@@ -114,4 +100,4 @@ export function ConnectButton({ className }: { className?: string }) {
       </Button>
     </div>
   )
-}
+}

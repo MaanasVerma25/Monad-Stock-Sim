@@ -2,7 +2,6 @@
 
 import { Navbar } from "@/components/Navbar"
 import { ConnectButton } from "@/components/wallet/ConnectButton"
-import { ClaimFundsButton } from "@/components/onboarding/ClaimFundsButton"
 import { StockCard } from "@/components/dashboard/StockCard"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { ArrowUpRight, ArrowDownRight, Activity } from "lucide-react"
@@ -38,7 +37,6 @@ export default function TradePage() {
                 </div>
                 <div className="flex items-center gap-3">
                   <ConnectButton />
-                  <ClaimFundsButton />
                 </div>
               </div>
             </CardContent>

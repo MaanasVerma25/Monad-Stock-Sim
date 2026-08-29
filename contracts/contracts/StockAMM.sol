@@ -1,13 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.20;
 
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract StockAMM is Ownable {
-    using SafeERC20 for IERC20;
-
     struct StockInfo {
         string ticker;
         string name;
@@ -19,8 +15,6 @@ contract StockAMM is Ownable {
 
     StockInfo[] public stocks;
     mapping(address => mapping(uint256 => uint256)) public userShares;
-
-    IERC20 public immutable playMoney;
 
     // Base share liquidity per pool (lower value = more sensitive price bonding curve)
     uint256 public shareLiquidity;
@@ -36,12 +30,14 @@ contract StockAMM is Ownable {
         uint256 newPrice
     );
 
-    constructor(address _playMoney, uint256 _shareLiquidity) Ownable(msg.sender) {
-        require(_playMoney != address(0), "Invalid playMoney");
+    constructor(uint256 _shareLiquidity) Ownable(msg.sender) {
         require(_shareLiquidity > 0, "Invalid liquidity");
-        playMoney = IERC20(_playMoney);
         shareLiquidity = _shareLiquidity;
     }
+
+    receive() external payable {}
+
+    function depositNativeLiquidity() external payable {}
 
     function addStock(string calldata ticker, string calldata name, uint256 basePrice) external onlyOwner returns (uint256) {
         require(bytes(ticker).length > 0, "Empty ticker");
@@ -111,8 +107,9 @@ contract StockAMM is Ownable {
         shareLiquidity = _shareLiquidity;
     }
 
-    function buy(uint256 stockId, uint256 cashAmount) external {
-        require(cashAmount > 0, "Zero amount");
+    function buy(uint256 stockId) external payable {
+        uint256 cashAmount = msg.value;
+        require(cashAmount > 0, "Zero MON sent");
         require(stockId < stocks.length, "Invalid stock");
 
         StockInfo storage stock = stocks[stockId];
@@ -120,8 +117,6 @@ contract StockAMM is Ownable {
         uint256 sharesOut = (stock.shareReserve * cashAmount) / (stock.cashReserve + cashAmount);
         require(sharesOut > 0, "No shares received");
         require(sharesOut <= stock.shareReserve, "Insufficient liquidity");
-
-        playMoney.safeTransferFrom(msg.sender, address(this), cashAmount);
 
         stock.cashReserve += cashAmount;
         stock.shareReserve -= sharesOut;
@@ -142,13 +137,15 @@ contract StockAMM is Ownable {
 
         uint256 cashOut = (stock.cashReserve * shareAmount) / (stock.shareReserve + shareAmount);
         require(cashOut > 0, "No cash received");
-        require(cashOut <= stock.cashReserve, "Insufficient liquidity");
+        require(cashOut <= stock.cashReserve, "Insufficient cash reserve");
+        require(cashOut <= address(this).balance, "Insufficient native MON in contract");
 
         userShares[msg.sender][stockId] -= shareAmount;
         stock.shareReserve += shareAmount;
         stock.cashReserve -= cashOut;
 
-        playMoney.safeTransfer(msg.sender, cashOut);
+        (bool sent, ) = payable(msg.sender).call{value: cashOut}("");
+        require(sent, "Native MON transfer failed");
 
         uint256 newPrice = getPrice(stockId);
 

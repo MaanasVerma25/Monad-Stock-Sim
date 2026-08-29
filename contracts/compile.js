@@ -18,15 +18,13 @@ function findImports(importPath) {
   }
 }
 
-console.log('Compiling PlayMoney.sol and StockAMM.sol...');
+console.log('Compiling StockAMM.sol for Native MON trading...');
 
-const playMoneySource = fs.readFileSync(path.join(__dirname, 'contracts', 'PlayMoney.sol'), 'utf8');
 const stockAmmSource = fs.readFileSync(path.join(__dirname, 'contracts', 'StockAMM.sol'), 'utf8');
 
 const input = {
   language: 'Solidity',
   sources: {
-    'PlayMoney.sol': { content: playMoneySource },
     'StockAMM.sol': { content: stockAmmSource }
   },
   settings: {
@@ -52,17 +50,12 @@ if (output.errors) {
   if (hasErrors) process.exit(1);
 }
 
-const playMoneyAbi = output.contracts['PlayMoney.sol']['PlayMoney'].abi;
-const playMoneyBytecode = output.contracts['PlayMoney.sol']['PlayMoney'].evm.bytecode.object;
-
 const stockAmmAbi = output.contracts['StockAMM.sol']['StockAMM'].abi;
 const stockAmmBytecode = output.contracts['StockAMM.sol']['StockAMM'].evm.bytecode.object;
 
-console.log('PlayMoney Compiled! Bytecode length:', playMoneyBytecode.length);
 console.log('StockAMM Compiled! Bytecode length:', stockAmmBytecode.length);
 
 fs.writeFileSync(path.join(__dirname, 'compiled.json'), JSON.stringify({
-  PlayMoney: { abi: playMoneyAbi, bytecode: playMoneyBytecode },
   StockAMM: { abi: stockAmmAbi, bytecode: stockAmmBytecode }
 }, null, 2));
 

@@ -51,23 +51,23 @@ export default function HomePage() {
             </p>
 
             <div className="flex flex-col sm:flex-row justify-center gap-4">
-              <Link href="/onboarding">
+              <Link href="/dashboard">
                 <Button
                   size="lg"
                   className="w-full sm:w-auto gap-2 bg-gradient-to-b from-white via-zinc-200 to-zinc-400 text-black font-medium border border-white shadow-lg shadow-white/10 hover:opacity-90 transition-opacity px-8 py-4 text-base"
                 >
-                  <Wallet className="h-5 w-5 text-black" />
-                  Claim 100k MON & Start
+                  <TrendingUp className="h-5 w-5 text-black" />
+                  Open Live Dashboard
                 </Button>
               </Link>
-              <Link href="/dashboard">
+              <Link href="/onboarding">
                 <Button
                   size="lg"
                   variant="outline"
                   className="w-full sm:w-auto gap-2 backdrop-blur-md bg-white/10 border border-white/30 text-white hover:bg-white/20 transition-all px-8 py-4 text-base font-medium"
                 >
-                  <TrendingUp className="h-5 w-5 text-white" />
-                  Live Dashboard
+                  <Wallet className="h-5 w-5 text-white" />
+                  Wallet Guide & Faucet
                 </Button>
               </Link>
             </div>
@@ -140,14 +140,14 @@ export default function HomePage() {
               Ready to test your trading strategy?
             </h2>
             <p className="text-[#9a9a9a] mb-8 max-w-xl mx-auto">
-              Get 100,000 MON starter funds minted directly to your browser wallet with one click.
+              Trade synthetic equities on Monad Testnet directly with native MON from your browser wallet.
             </p>
-            <Link href="/onboarding">
+            <Link href="/dashboard">
               <Button
                 size="lg"
                 className="gap-2 bg-gradient-to-b from-white via-zinc-200 to-zinc-400 text-black font-medium border border-white shadow-lg shadow-white/10 hover:opacity-90 transition-opacity px-8 py-4 text-base"
               >
-                Get Started Now <ArrowRight className="h-5 w-5 text-black" />
+                Start Trading Now <ArrowRight className="h-5 w-5 text-black" />
               </Button>
             </Link>
           </section>

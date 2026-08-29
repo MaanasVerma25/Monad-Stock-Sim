@@ -1,46 +1,13 @@
-export const PLAY_MONEY_ADDRESS = (process.env.NEXT_PUBLIC_PLAY_MONEY_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
 export const STOCK_AMM_ADDRESS = (process.env.NEXT_PUBLIC_STOCK_AMM_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
-
-export const playMoneyAbi = [
-  {
-    inputs: [{ name: "account", type: "address" }],
-    name: "balanceOf",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function"
-  },
-  {
-    inputs: [],
-    name: "claimStarterFunds",
-    outputs: [],
-    stateMutability: "nonpayable",
-    type: "function"
-  },
-  {
-    inputs: [{ name: "owner", type: "address" }, { name: "spender", type: "address" }],
-    name: "allowance",
-    outputs: [{ name: "", type: "uint256" }],
-    stateMutability: "view",
-    type: "function"
-  },
-  {
-    inputs: [{ name: "spender", type: "address" }, { name: "value", type: "uint256" }],
-    name: "approve",
-    outputs: [{ name: "", type: "bool" }],
-    stateMutability: "nonpayable",
-    type: "function"
-  }
-] as const;
 
 export const stockAmmAbi = [
   {
     inputs: [
-      { name: "stockId", type: "uint256" },
-      { name: "cashAmount", type: "uint256" }
+      { name: "stockId", type: "uint256" }
     ],
     name: "buy",
     outputs: [],
-    stateMutability: "nonpayable",
+    stateMutability: "payable",
     type: "function"
   },
   {
