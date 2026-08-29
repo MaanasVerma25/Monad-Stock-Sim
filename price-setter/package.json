@@ -1,0 +1,18 @@
+{
+  "name": "price-setter",
+  "version": "1.0.0",
+  "description": "Daily real-world stock price updater for Monad Market Sim",
+  "main": "index.ts",
+  "scripts": {
+    "update-prices": "ts-node index.ts"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "viem": "^2.21.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.3.3"
+  }
+}
