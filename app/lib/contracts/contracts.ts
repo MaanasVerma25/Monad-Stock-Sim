@@ -1,4 +1,4 @@
-export const STOCK_AMM_ADDRESS = (process.env.NEXT_PUBLIC_STOCK_AMM_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
+export const STOCK_AMM_ADDRESS = (process.env.NEXT_PUBLIC_STOCK_AMM_ADDRESS || "0x9c26b5e73f61a6a1daea9addab5875422ff6bada") as `0x${string}`;
 
 export const stockAmmAbi = [
   {
