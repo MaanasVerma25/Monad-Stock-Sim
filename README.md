@@ -406,6 +406,14 @@ Successful trades display a direct "View on MonadScan" link pointing to `https:/
 
 ---
 
+## Contact
+
+- **Mobile:** 8765316576
+- **Email:** [vermamaanas5@gmail.com](mailto:vermamaanas5@gmail.com)
+
+---
+
 ## License
 
 MIT
+
