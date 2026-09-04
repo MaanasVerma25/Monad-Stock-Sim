@@ -14,13 +14,21 @@ interface StockCardProps {
   stockId: number
   ticker: string
   name: string
+  autoOpen?: boolean
 }
 
-export function StockCard({ stockId, ticker, name }: StockCardProps) {
+export function StockCard({ stockId, ticker, name, autoOpen }: StockCardProps) {
   const [priceHistory, setPriceHistory] = useState<number[]>([])
   const [maxPoints] = useState(100)
   const [isTradeOpen, setIsTradeOpen] = useState(false)
   const [liveApiPrice, setLiveApiPrice] = useState<number>(0)
+
+  useEffect(() => {
+    if (autoOpen) {
+      setIsTradeOpen(true)
+    }
+  }, [autoOpen])
+
 
   const { data: stockData } = useReadContract({
     address: STOCK_AMM_ADDRESS,
