@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { PulseStockLogo } from "@/components/PulseStockLogo"
 import { ConnectButton } from "@/components/wallet/ConnectButton"
 import { Zap, LayoutDashboard, Wallet, Trophy } from "lucide-react"
+import { TopTickerMarquee } from "@/components/TopTickerMarquee"
 
 export function Navbar() {
   const pathname = usePathname()
@@ -18,7 +19,9 @@ export function Navbar() {
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-white/10 bg-black/60 backdrop-blur-md">
+      <TopTickerMarquee />
       <div className="container mx-auto px-4 py-3 flex items-center justify-between">
+
         <PulseStockLogo />
 
         <nav className="hidden md:flex items-center gap-1.5 p-1 rounded-lg border border-white/10 bg-black/40 backdrop-blur-sm">

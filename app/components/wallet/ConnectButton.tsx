@@ -1,9 +1,9 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { useAccount, useConnect, useDisconnect, useBalance, useChainId, useSwitchChain } from "wagmi"
+import { useAccount, useConnect, useDisconnect, useBalance } from "wagmi"
 import { Button } from "@/components/ui/button"
-import { Wallet, LogOut, AlertTriangle, Fuel, RefreshCw } from "lucide-react"
+import { Wallet, LogOut, AlertTriangle, Fuel } from "lucide-react"
 import { shortenAddress } from "@/lib/utils"
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip"
 
@@ -12,10 +12,6 @@ export function ConnectButton({ className }: { className?: string }) {
   const { address, isConnected } = useAccount()
   const { connectAsync, connectors } = useConnect()
   const { disconnect } = useDisconnect()
-  const chainId = useChainId()
-  const { switchChain } = useSwitchChain()
-
-  const isWrongNetwork = isConnected && chainId !== 10143
 
   useEffect(() => {
     setMounted(true)
@@ -24,7 +20,7 @@ export function ConnectButton({ className }: { className?: string }) {
   // Native MON balance from MetaMask wallet
   const { data: nativeBalance } = useBalance({
     address: address,
-    query: { enabled: !!address && mounted && chainId === 10143, refetchInterval: 3000 },
+    query: { enabled: !!address && mounted, refetchInterval: 3000 },
   })
 
   const nativeMonBalance = nativeBalance ? Number(nativeBalance.formatted) : 0
@@ -63,23 +59,6 @@ export function ConnectButton({ className }: { className?: string }) {
         <Wallet className="h-4 w-4 text-white" />
         Connect Wallet
       </Button>
-    )
-  }
-
-  if (isWrongNetwork) {
-    return (
-      <div className={`flex items-center gap-2 ${className || ""}`}>
-        <Button
-          onClick={() => switchChain?.({ chainId: 10143 })}
-          className="gap-2 bg-amber-600 hover:bg-amber-500 text-white font-bold px-4 py-2 text-xs font-mono border border-amber-400 animate-pulse"
-        >
-          <RefreshCw className="h-3.5 w-3.5" />
-          Switch to Monad Testnet (10143)
-        </Button>
-        <Button variant="ghost" size="sm" onClick={() => disconnect()} className="text-[#9a9a9a] hover:text-white hover:bg-white/10">
-          <LogOut className="h-4 w-4" />
-        </Button>
-      </div>
     )
   }
 

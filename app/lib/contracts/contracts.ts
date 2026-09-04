@@ -1,11 +1,4 @@
-const RAW_ADDRESS = process.env.NEXT_PUBLIC_STOCK_AMM_ADDRESS || "0x9c26b5e73f61a6a1daea9addab5875422ff6bada";
-
-// Ensure transactions route to active Native MON contract (0x9c26...) even if Vercel environment has old address (0xb4ca...)
-export const STOCK_AMM_ADDRESS = (
-  RAW_ADDRESS.toLowerCase() === "0xb4ca0e7c014c249f7403f5dad24b00dfc221368b".toLowerCase()
-    ? "0x9c26b5e73f61a6a1daea9addab5875422ff6bada"
-    : RAW_ADDRESS
-) as `0x${string}`;
+export const STOCK_AMM_ADDRESS = (process.env.NEXT_PUBLIC_STOCK_AMM_ADDRESS || "0x0000000000000000000000000000000000000000") as `0x${string}`;
 
 export const stockAmmAbi = [
   {
